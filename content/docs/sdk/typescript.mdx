@@ -1,0 +1,99 @@
+---
+title: TypeScript SDK
+description: Full API reference for the Veto TypeScript SDK.
+---
+
+## Installation
+
+```bash
+npm install veto-sdk
+```
+
+## `Veto.init(options?)`
+
+Initialize Veto. Loads configuration from `./veto` by default.
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+```
+
+## `veto.wrap<T>(tools: T[]): T[]`
+
+Wraps an array of tools with validation. The returned tools have identical types — fully compatible with your AI framework.
+
+```typescript
+const wrappedForLangChain = veto.wrap(langChainTools);
+const wrappedForVercel = veto.wrap(vercelTools);
+```
+
+Works with LangChain, Vercel AI SDK, OpenAI function calling, Anthropic tool use, and custom tool objects.
+
+## `veto.wrapTool<T>(tool: T): T`
+
+Wraps a single tool instance.
+
+```typescript
+const safeTool = veto.wrapTool(myTool);
+```
+
+## `veto.getHistoryStats()`
+
+Returns statistics about validation decisions.
+
+```typescript
+const stats = veto.getHistoryStats();
+// { totalCalls: 5, allowedCalls: 4, deniedCalls: 1, ... }
+```
+
+## `veto.clearHistory()`
+
+Resets the history statistics.
+
+```typescript
+veto.clearHistory();
+```
+
+## Error handling
+
+When a tool call is blocked, Veto throws a `ToolCallDeniedError`:
+
+```typescript
+import { ToolCallDeniedError } from 'veto-sdk';
+
+try {
+  await wrappedTool.invoke(args);
+} catch (error) {
+  if (error instanceof ToolCallDeniedError) {
+    console.log(error.message);  // "Tool call denied: limit-transfers"
+    console.log(error.ruleId);   // "limit-transfers"
+  }
+}
+```
+
+## Provider adapters
+
+The SDK includes adapters that convert tool definitions between formats:
+
+```typescript
+import { adapters } from 'veto-sdk/providers';
+
+// Convert OpenAI tools to Anthropic format
+const anthropicTools = adapters.toAnthropic(openAITools);
+
+// Convert Anthropic tools to OpenAI format
+const openAITools = adapters.toOpenAI(anthropicTools);
+```
+
+## Exports
+
+The SDK publishes multiple entry points:
+
+| Import | What it provides |
+|--------|-----------------|
+| `veto-sdk` | Core `Veto` class, types, errors |
+| `veto-sdk/providers` | Provider adapters (OpenAI, Anthropic, Google) |
+| `veto-sdk/rules` | Rule parsing and matching utilities |
+| `veto-sdk/kernel` | Local model evaluation via Ollama |
+| `veto-sdk/custom` | Direct LLM provider integration |

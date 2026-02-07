@@ -1,0 +1,69 @@
+---
+title: Python SDK
+description: Full API reference for the Veto Python SDK.
+---
+
+## Installation
+
+```bash
+pip install veto
+```
+
+With LLM provider extras:
+
+```bash
+pip install veto[openai]      # OpenAI support
+pip install veto[anthropic]   # Anthropic support
+pip install veto[gemini]      # Google Gemini support
+pip install veto[all]         # All providers
+```
+
+## `Veto.init(options?)`
+
+Initialize Veto. Loads configuration from `./veto` by default.
+
+```python
+from veto import Veto
+
+veto = await Veto.init()
+```
+
+## `veto.wrap(tools)`
+
+Wraps an array of tools with validation.
+
+```python
+wrapped_tools = veto.wrap(my_tools)
+```
+
+## `veto.wrap_tool(tool)`
+
+Wraps a single tool instance.
+
+```python
+safe_tool = veto.wrap_tool(my_tool)
+```
+
+## `veto.get_history_stats()`
+
+Returns statistics about validation decisions.
+
+```python
+stats = veto.get_history_stats()
+# {"total_calls": 5, "allowed_calls": 4, "denied_calls": 1, ...}
+```
+
+## `veto.clear_history()`
+
+Resets the history statistics.
+
+```python
+veto.clear_history()
+```
+
+## CLI commands
+
+| Command | Description |
+|---------|-------------|
+| `veto init` | Initialize Veto in current directory |
+| `veto version` | Show version |

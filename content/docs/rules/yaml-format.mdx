@@ -1,0 +1,122 @@
+---
+title: YAML Rule Format
+description: Complete reference for Veto's YAML rule syntax.
+---
+
+Each rule file (e.g. `veto/rules/policy.yaml`) can contain one or more rules.
+
+## Full schema
+
+```yaml
+rules:
+  - id: unique-rule-id           # [Required] Unique identifier
+    name: Human readable name    # [Required] Descriptive name for logging
+    enabled: true                # [Optional] Default: true
+    severity: high               # [Optional] critical, high, medium, low, info
+    action: block                # [Required] block, warn, log, allow
+
+    # Scope: which tools does this rule apply to?
+    tools:                       # [Optional] List of tool names
+      - make_payment             # If omitted, applies to ALL tools
+
+    # Static conditions (optional):
+    # Evaluated locally before LLM validation
+    conditions:
+      - field: arguments.amount  # Dot notation for nested args
+        operator: greater_than   # See operators table below
+        value: 1000
+
+    # Description (optional):
+    # Natural language guidance for the validation LLM
+    description: "Ensure the payment recipient is a verified vendor."
+```
+
+## Fields
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `id` | Yes | — | Unique identifier for the rule |
+| `name` | Yes | — | Human-readable name for logging |
+| `enabled` | No | `true` | Whether the rule is active |
+| `severity` | No | `medium` | `critical`, `high`, `medium`, `low`, `info` |
+| `action` | Yes | — | `block`, `warn`, `log`, `allow` |
+| `tools` | No | All tools | List of tool names this rule applies to |
+| `conditions` | No | — | Static constraint checks |
+| `description` | No | — | Natural language guidance for LLM validation |
+
+## Condition operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `equals` | Exact match | `value: "admin"` |
+| `contains` | Substring match | `value: "password"` |
+| `starts_with` | Prefix match | `value: "/etc"` |
+| `ends_with` | Suffix match | `value: ".exe"` |
+| `greater_than` | Numeric comparison | `value: 1000` |
+| `less_than` | Numeric comparison | `value: 0` |
+
+## Rule matching logic
+
+### 1. Rule selection
+
+Veto selects rules based on the `tools` list:
+
+- **Tool-specific rules**: If a rule lists specific tools (e.g. `tools: [make_payment]`), it only applies when those tools are called
+- **Global rules**: If `tools` is missing or empty `[]`, the rule activates for every tool call
+
+### 2. Validation execution
+
+For each intercepted tool call, Veto aggregates all applicable rules (global + specific) and validates:
+
+1. **Static conditions** — if `conditions` are defined, they're checked first. If a condition matches, the rule triggers immediately
+2. **Semantic validation** — if no static conditions match (or none exist), the rule's `name` and `description` are sent to the LLM for semantic evaluation
+
+## Examples
+
+### Block large financial transfers
+
+```yaml
+rules:
+  - id: limit-transfers
+    name: Limit large transfers
+    action: block
+    severity: critical
+    tools:
+      - transfer_funds
+      - send_payment
+    conditions:
+      - field: arguments.amount
+        operator: greater_than
+        value: 10000
+```
+
+### Prevent file access outside project
+
+```yaml
+rules:
+  - id: restrict-file-paths
+    name: Restrict file access to project directory
+    action: block
+    severity: high
+    tools:
+      - read_file
+      - write_file
+    conditions:
+      - field: arguments.path
+        operator: starts_with
+        value: "/etc"
+```
+
+### Global policy via LLM
+
+```yaml
+rules:
+  - id: no-pii-disclosure
+    name: Prevent PII disclosure
+    action: block
+    severity: critical
+    description: >
+      Block any tool call that would expose personally identifiable
+      information such as social security numbers, credit card numbers,
+      or home addresses to external services.
+```

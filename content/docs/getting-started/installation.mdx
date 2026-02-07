@@ -1,0 +1,53 @@
+---
+title: Installation
+description: Install the Veto SDK for TypeScript or Python.
+---
+
+## TypeScript
+
+```bash
+npm install veto-sdk
+```
+
+Or with your preferred package manager:
+
+```bash
+pnpm add veto-sdk
+yarn add veto-sdk
+```
+
+## Python
+
+```bash
+pip install veto
+```
+
+With LLM provider support:
+
+```bash
+pip install veto[openai]      # OpenAI support
+pip install veto[anthropic]   # Anthropic support
+pip install veto[gemini]      # Google Gemini support
+pip install veto[all]         # All providers
+```
+
+## Initialize configuration
+
+After installing, run the init command to create your Veto config directory:
+
+```bash
+# TypeScript
+npx veto init
+
+# Python
+veto init
+```
+
+This creates a `veto/` directory in your project root:
+
+```
+veto/
+├── veto.config.yaml    # Main configuration
+└── rules/
+    └── default.yaml    # Default rule file
+```

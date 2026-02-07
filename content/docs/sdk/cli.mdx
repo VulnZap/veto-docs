@@ -1,0 +1,46 @@
+---
+title: CLI
+description: Veto command-line interface reference.
+---
+
+## Installation
+
+The CLI is included with both SDKs:
+
+```bash
+# TypeScript (via npx)
+npx veto <command>
+
+# Python (installed globally with pip)
+veto <command>
+```
+
+## Commands
+
+### `veto init`
+
+Scaffolds a new Veto configuration in the current directory.
+
+```bash
+npx veto init
+```
+
+Creates:
+
+```
+veto/
+├── veto.config.yaml    # Main configuration file
+└── rules/
+    └── default.yaml    # Default rule template
+```
+
+If the `veto/` directory already exists, the command will not overwrite existing files.
+
+### `veto version`
+
+Prints the current Veto SDK version.
+
+```bash
+npx veto version
+# veto-sdk@1.2.0
+```

@@ -1,0 +1,15 @@
+{
+  "root": true,
+  "title": "Docs",
+  "pages": [
+    "index",
+    "---Getting Started---",
+    "...getting-started",
+    "---SDKs---",
+    "...sdk",
+    "---Rules---",
+    "...rules",
+    "---API Reference---",
+    "...api-reference"
+  ]
+}

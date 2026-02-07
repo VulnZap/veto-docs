@@ -1,0 +1,82 @@
+---
+title: Validation Modes
+description: How Veto validates tool calls — API, custom, and kernel modes.
+---
+
+Veto supports three validation modes, configured in `veto.config.yaml`:
+
+```yaml
+validation:
+  mode: "custom"  # "api", "custom", or "kernel"
+```
+
+## API mode
+
+Sends validation requests to the Veto server at `POST /v1/validate`.
+
+```yaml
+validation:
+  mode: "api"
+  api:
+    url: "https://api.runveto.com"
+    key: "veto_abc123..."
+```
+
+Best for production deployments with the Veto dashboard. Provides:
+- Centralized policy management
+- Real-time decision logging
+- Approval workflows for escalated calls
+- Team-wide visibility via the dashboard at [runveto.com](https://runveto.com)
+
+## Custom mode
+
+Calls an LLM provider directly from the SDK. No server needed.
+
+```yaml
+validation:
+  mode: "custom"
+
+custom:
+  provider: "openai"     # openai, anthropic, or gemini
+  model: "gpt-4o-mini"
+```
+
+Supported providers:
+
+| Provider | Models | Env variable |
+|----------|--------|-------------|
+| `openai` | `gpt-4o`, `gpt-4o-mini` | `OPENAI_API_KEY` |
+| `anthropic` | `claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY` |
+| `gemini` | `gemini-3-flash-preview` | `GOOGLE_API_KEY` |
+
+Best for development and testing. Rules are evaluated locally using the LLM.
+
+## Kernel mode
+
+Uses a local Ollama model for fully offline validation.
+
+```yaml
+validation:
+  mode: "kernel"
+
+kernel:
+  url: "http://localhost:11434/v1"
+  model: "llama3"
+```
+
+Requires [Ollama](https://ollama.ai) running locally. Best for air-gapped environments or when you need zero external API calls.
+
+## Operating modes
+
+Separate from validation mode, Veto has two operating modes:
+
+```yaml
+mode: "strict"  # or "log"
+```
+
+| Mode | Behavior |
+|------|----------|
+| `strict` | Blocks denied calls — throws `ToolCallDeniedError` |
+| `log` | Logs denied calls but allows execution to continue |
+
+Use `log` mode during initial rollout to observe what would be blocked without affecting agent behavior.

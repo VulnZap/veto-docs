@@ -1,0 +1,53 @@
+---
+title: What is Veto?
+description: The permission layer for AI agents. Intercept, validate, and control every tool call.
+---
+
+Veto is a guardrail system for AI agent tool calls. It sits between an AI agent and its tools — intercepting every tool call, validating it against rules and policies, and allowing, blocking, or escalating for human approval.
+
+The agent is unaware of the guardrail. The tool interface is preserved.
+
+## How it works
+
+1. AI agent calls a tool (e.g. `send_email({to: "...", body: "..."})`)
+2. Veto intercepts the call via the SDK
+3. Arguments are validated against your rules (YAML constraints + LLM semantic checks)
+4. The call is allowed, blocked, or escalated based on the result
+5. If allowed, the tool executes normally. If blocked, the agent receives an error
+
+```
+┌──────────┐     ┌───────┐     ┌──────────┐
+│ AI Agent │────▶│ Veto  │────▶│  Tools   │
+│          │     │       │     │          │
+│  calls   │     │ rules │     │ execute  │
+│  tools   │     │ + LLM │     │ actions  │
+└──────────┘     └───────┘     └──────────┘
+```
+
+## Features
+
+- **Provider agnostic** — works with OpenAI, Anthropic, Google, LangChain, Vercel AI SDK
+- **YAML rules** — define constraints with simple, declarative YAML
+- **LLM validation** — semantic checks for cases static rules can't cover
+- **Multiple validation modes** — API (remote server), custom (direct LLM), or kernel (local Ollama)
+- **TypeScript + Python SDKs** — first-class support for both languages
+- **Dashboard** — real-time monitoring at [runveto.com](https://runveto.com)
+
+## Quick example
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+const wrappedTools = veto.wrap(myTools);
+
+// Pass wrapped tools to your agent — it works exactly the same,
+// but every call is now validated against your rules
+const agent = createAgent({ tools: wrappedTools });
+```
+
+## Next steps
+
+- [Installation](/docs/getting-started/installation) — install the SDK for TypeScript or Python
+- [Quick Start](/docs/getting-started/quick-start) — get Veto running in 5 minutes
+- [Rule Format](/docs/rules/yaml-format) — learn the YAML rule syntax

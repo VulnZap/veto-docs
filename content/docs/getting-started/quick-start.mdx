@@ -1,0 +1,85 @@
+---
+title: Quick Start
+description: Get Veto running in 5 minutes.
+---
+
+## 1. Install and initialize
+
+```bash
+npm install veto-sdk
+npx veto init
+```
+
+## 2. Define a rule
+
+Edit `veto/rules/default.yaml`:
+
+```yaml
+rules:
+  - id: limit-transfers
+    name: Limit large transfers
+    action: block
+    tools:
+      - transfer_funds
+    conditions:
+      - field: arguments.amount
+        operator: greater_than
+        value: 1000
+```
+
+This rule blocks any call to `transfer_funds` where the amount exceeds 1000.
+
+## 3. Wrap your tools
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+// Your existing tools
+const myTools = [transferFundsTool, sendEmailTool, readFileTool];
+
+// Initialize Veto (loads config from ./veto)
+const veto = await Veto.init();
+
+// Wrap tools with validation
+const wrappedTools = veto.wrap(myTools);
+
+// Pass to your agent — the interface is identical
+const agent = createAgent({
+  tools: wrappedTools,
+});
+```
+
+When the agent calls `transfer_funds({ amount: 5000 })`, Veto intercepts and blocks it. The agent receives a `ToolCallDeniedError` and can try a different approach.
+
+## 4. Configure validation mode
+
+Edit `veto/veto.config.yaml` to choose how validation runs:
+
+```yaml
+version: "1.0"
+mode: "strict"
+
+validation:
+  mode: "custom"     # "api", "kernel", or "custom"
+
+custom:
+  provider: "openai"
+  model: "gpt-4o-mini"
+
+rules:
+  directory: "./rules"
+  recursive: true
+```
+
+| Mode | How it works | When to use |
+|------|-------------|-------------|
+| `api` | Sends validation requests to the Veto server | Production with dashboard |
+| `custom` | Calls an LLM provider directly | Development, no server needed |
+| `kernel` | Uses a local Ollama model | Offline, air-gapped environments |
+
+## Next steps
+
+- [TypeScript SDK](/docs/sdk/typescript) — full API reference
+- [Python SDK](/docs/sdk/python) — full API reference
+- [YAML Rule Format](/docs/rules/yaml-format) — complete rule syntax
+- [Validation Modes](/docs/rules/validation-modes) — deep dive into each mode

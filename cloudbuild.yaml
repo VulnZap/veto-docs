@@ -1,0 +1,48 @@
+steps:
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: 'build'
+    args:
+      - '--destination=us-central1-docker.pkg.dev/$PROJECT_ID/veto-repo/veto-docs:$COMMIT_SHA'
+      - '--destination=us-central1-docker.pkg.dev/$PROJECT_ID/veto-repo/veto-docs:latest'
+      - '--cache=true'
+      - '--cache-ttl=168h'
+      - '--cache-repo=us-central1-docker.pkg.dev/$PROJECT_ID/veto-repo/veto-docs-cache'
+      - '--snapshot-mode=redo'
+      - '--use-new-run'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    id: 'deploy'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'veto-docs'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/veto-repo/veto-docs:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+      - '--cpu=1'
+      - '--memory=512Mi'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--concurrency=80'
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    id: 'get-url'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        URL=$(gcloud run services describe veto-docs --region=us-central1 --format='value(status.url)')
+        echo "Deployed: $$URL"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: 100
+timeout: '600s'

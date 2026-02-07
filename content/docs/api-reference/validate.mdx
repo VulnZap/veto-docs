@@ -1,0 +1,100 @@
+---
+title: POST /v1/validate
+description: Core validation endpoint — validates a tool call against policies.
+---
+
+The validation endpoint is the hot path. Every tool call intercepted by the SDK hits this endpoint when running in API mode.
+
+## Request
+
+```
+POST /v1/validate
+```
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Veto-API-Key` | Yes | API key for authentication |
+| `Content-Type` | Yes | `application/json` |
+
+### Body
+
+```json
+{
+  "tool": "send_email",
+  "arguments": {
+    "to": "user@example.com",
+    "subject": "Hello",
+    "body": "..."
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `tool` | `string` | Yes | Name of the tool being called |
+| `arguments` | `object` | Yes | Arguments passed to the tool |
+
+## Response
+
+### Allowed
+
+```json
+{
+  "decision": "allow",
+  "latency_ms": 45
+}
+```
+
+### Denied
+
+```json
+{
+  "decision": "deny",
+  "reason": "Rule limit-transfers: amount 5000 exceeds limit of 1000",
+  "rule_id": "limit-transfers",
+  "latency_ms": 12
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `decision` | `"allow" \| "deny"` | Validation result |
+| `reason` | `string?` | Explanation when denied |
+| `rule_id` | `string?` | ID of the rule that triggered denial |
+| `latency_ms` | `number` | Server-side processing time |
+
+## Authentication
+
+The API key is created in the Veto dashboard or via the `POST /v1/api-keys` endpoint. Each key is scoped to an organization and project.
+
+```bash
+curl -X POST https://api.runveto.com/v1/validate \
+  -H "X-Veto-API-Key: veto_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool": "transfer_funds",
+    "arguments": { "amount": 500, "to": "vendor-123" }
+  }'
+```
+
+## Rate limiting
+
+The endpoint is rate-limited per API key. Default limits:
+
+| Plan | Requests/min |
+|------|-------------|
+| Free | 60 |
+| Pro | 600 |
+| Enterprise | Custom |
+
+Rate limit headers are included in every response:
+
+```
+X-RateLimit-Limit: 60
+X-RateLimit-Remaining: 58
+X-RateLimit-Reset: 1706140800
+```
