@@ -1,16 +1,28 @@
 import { RootProvider } from 'fumadocs-ui/provider/next';
 import type { ReactNode } from 'react';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './global.css';
 
+export const viewport: Viewport = {
+  themeColor: '#0a0a0a',
+};
+
 export const metadata: Metadata = {
+  metadataBase: new URL('https://docs.runveto.com'),
   title: {
     default: 'Veto Docs',
     template: '%s | Veto Docs',
   },
   description: 'The permission layer for AI agents. Intercept, validate, and control every tool call.',
   icons: {
-    icon: '/favicon.ico',
+    icon: '/favicon.svg',
+  },
+  openGraph: {
+    type: 'website',
+    siteName: 'Veto Docs',
+    title: 'Veto Docs',
+    description: 'The permission layer for AI agents. Intercept, validate, and control every tool call.',
+    images: ['/og.png'],
   },
 };
 
