@@ -1,4 +1,5 @@
 import { RootProvider } from 'fumadocs-ui/provider/next';
+import Script from 'next/script';
 import type { ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
 import './global.css';
@@ -38,6 +39,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
+        {process.env.NODE_ENV === 'development' && (
+          <Script
+            src="//unpkg.com/react-grab/dist/index.global.js"
+            crossOrigin="anonymous"
+            strategy="beforeInteractive"
+          />
+        )}
       </head>
       <body className="flex min-h-screen flex-col">
         <RootProvider

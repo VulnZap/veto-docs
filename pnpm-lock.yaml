@@ -42,6 +42,9 @@ importers:
       postcss:
         specifier: ^8.4.0
         version: 8.5.6
+      react-grab:
+        specifier: ^0.1.13
+        version: 0.1.13(@types/react@19.2.13)(react@19.2.4)
       tailwindcss:
         specifier: ^4.0.0
         version: 4.1.18
@@ -958,6 +961,11 @@ packages:
     peerDependencies:
       '@types/react': ^19.2.0
 
+  '@types/react-reconciler@0.28.9':
+    resolution: {integrity: sha512-HHM3nxyUZ3zAylX8ZEyrDNd2XZOnQ0D5XfunJF5FLQnZbHHYq4UWvW1QfelQNXv1ICNkwYhfxjwfnqivYB6bFg==}
+    peerDependencies:
+      '@types/react': '*'
+
   '@types/react@19.2.13':
     resolution: {integrity: sha512-KkiJeU6VbYbUOp5ITMIc7kBfqlYkKA5KhEHVrGMmUUMt7NeaZg65ojdPk+FtNrBAOXNVM5QM72jnADjM+XVRAQ==}
 
@@ -993,6 +1001,11 @@ packages:
 
   bail@2.0.2:
     resolution: {integrity: sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==}
+
+  bippy@0.5.30:
+    resolution: {integrity: sha512-8CFmJAHD3gmTLDOCDHuWhjm1nxHSFZdlGoWtak9r53Uxn36ynOjxBLyxXHh/7h/XiKLyPvfdXa0gXWcD9o9lLQ==}
+    peerDependencies:
+      react: '>=17.0.1'
 
   caniuse-lite@1.0.30001769:
     resolution: {integrity: sha512-BCfFL1sHijQlBGWBMuJyhZUhzo7wer5sVj9hqekB/7xn0Ypy+pER/edCYQm4exbXj4WiySGp40P8UuTh6w1srg==}
@@ -1586,6 +1599,14 @@ packages:
     peerDependencies:
       react: ^19.2.4
 
+  react-grab@0.1.13:
+    resolution: {integrity: sha512-3bdlvwqDgEcjoUXtCOXvWRdPd/QyNJ02qEtlSYi+ZGB5I11J10YefqN4QOFU69dS+zYvti2dEOmaPMRZpgm0HQ==}
+    peerDependencies:
+      react: '>=17.0.0'
+    peerDependenciesMeta:
+      react:
+        optional: true
+
   react-medium-image-zoom@5.4.0:
     resolution: {integrity: sha512-BsE+EnFVQzFIlyuuQrZ9iTwyKpKkqdFZV1ImEQN573QPqGrIUuNni7aF+sZwDcxlsuOMayCr6oO/PZR/yJnbRg==}
     peerDependencies:
@@ -1685,12 +1706,25 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  seroval-plugins@1.5.0:
+    resolution: {integrity: sha512-EAHqADIQondwRZIdeW2I636zgsODzoBDwb3PT/+7TLDWyw1Dy/Xv7iGUIEXXav7usHDE9HVhOU61irI3EnyyHA==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      seroval: ^1.0
+
+  seroval@1.5.0:
+    resolution: {integrity: sha512-OE4cvmJ1uSPrKorFIH9/w/Qwuvi/IMcGbv5RKgcJ/zjA/IohDLU6SVaxFN9FwajbP7nsX0dQqMDes1whk3y+yw==}
+    engines: {node: '>=10'}
+
   sharp@0.34.5:
     resolution: {integrity: sha512-Ou9I5Ft9WNcCbXrU9cMgPBcCK8LiwLqcbywW3t4oDV37n1pzpuNLsYiAV8eODnjbtQlSDwZ2cUEeQz4E54Hltg==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
 
   shiki@3.22.0:
     resolution: {integrity: sha512-LBnhsoYEe0Eou4e1VgJACes+O6S6QC0w71fCSp5Oya79inkwkm15gQ1UF6VtQ8j/taMDh79hAB49WUk8ALQW3g==}
+
+  solid-js@1.9.11:
+    resolution: {integrity: sha512-WEJtcc5mkh/BnHA6Yrg4whlF8g6QwpmXXRg4P2ztPmcKeHHlH4+djYecBLhSpecZY2RRECXYUwIc/C2r3yzQ4Q==}
 
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
@@ -2609,6 +2643,10 @@ snapshots:
     dependencies:
       '@types/react': 19.2.13
 
+  '@types/react-reconciler@0.28.9(@types/react@19.2.13)':
+    dependencies:
+      '@types/react': 19.2.13
+
   '@types/react@19.2.13':
     dependencies:
       csstype: 3.2.3
@@ -2634,6 +2672,13 @@ snapshots:
   astring@1.9.0: {}
 
   bail@2.0.2: {}
+
+  bippy@0.5.30(@types/react@19.2.13)(react@19.2.4):
+    dependencies:
+      '@types/react-reconciler': 0.28.9(@types/react@19.2.13)
+      react: 19.2.4
+    transitivePeerDependencies:
+      - '@types/react'
 
   caniuse-lite@1.0.30001769: {}
 
@@ -3544,6 +3589,15 @@ snapshots:
       react: 19.2.4
       scheduler: 0.27.0
 
+  react-grab@0.1.13(@types/react@19.2.13)(react@19.2.4):
+    dependencies:
+      bippy: 0.5.30(@types/react@19.2.13)(react@19.2.4)
+      solid-js: 1.9.11
+    optionalDependencies:
+      react: 19.2.4
+    transitivePeerDependencies:
+      - '@types/react'
+
   react-medium-image-zoom@5.4.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
       react: 19.2.4
@@ -3686,6 +3740,12 @@ snapshots:
   semver@7.7.4:
     optional: true
 
+  seroval-plugins@1.5.0(seroval@1.5.0):
+    dependencies:
+      seroval: 1.5.0
+
+  seroval@1.5.0: {}
+
   sharp@0.34.5:
     dependencies:
       '@img/colour': 1.0.0
@@ -3728,6 +3788,12 @@ snapshots:
       '@shikijs/types': 3.22.0
       '@shikijs/vscode-textmate': 10.0.2
       '@types/hast': 3.0.4
+
+  solid-js@1.9.11:
+    dependencies:
+      csstype: 3.2.3
+      seroval: 1.5.0
+      seroval-plugins: 1.5.0(seroval@1.5.0)
 
   source-map-js@1.2.1: {}
 
