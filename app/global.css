@@ -23,9 +23,6 @@
     --color-fd-ring: hsl(24 94% 53%);
     --color-fd-destructive: hsl(0 63% 31%);
     --radius: 0px;
-    --surface: 0 0% 96%;
-    --surface-elevated: 0 0% 92%;
-    --border-subtle: 0 0% 85%;
   }
 
   .dark {
@@ -47,9 +44,6 @@
     --color-fd-input: hsl(0 0% 12%);
     --color-fd-ring: hsl(24 94% 53%);
     --color-fd-destructive: hsl(0 63% 31%);
-    --surface: 0 0% 5%;
-    --surface-elevated: 0 0% 10%;
-    --border-subtle: 0 0% 18%;
   }
 
   * {
@@ -72,75 +66,10 @@
   }
 }
 
-.btn-primary {
-  position: relative;
-  display: inline-block;
-  background: #f97316;
-  color: #fff;
-  border-bottom: 3px solid #c2410c;
-  transform: translateY(0);
-  transition: transform 0.1s ease, background 0.1s ease, border-bottom-width 0.1s ease;
-}
-
-.btn-primary:hover {
-  background: #fb923c;
-}
-
-.btn-primary:active {
-  transform: translateY(3px);
-  border-bottom-width: 0px;
-}
-
-.btn-secondary {
-  position: relative;
-  display: inline-block;
-  background: hsl(var(--surface));
-  border: 1px solid var(--color-fd-border);
-  border-bottom: 3px solid hsl(var(--border-subtle));
-  color: var(--color-fd-foreground);
-  transform: translateY(0);
-  transition: transform 0.1s ease, background 0.1s ease, border-bottom-width 0.1s ease;
-}
-
-.btn-secondary:hover {
-  background: hsl(var(--surface-elevated));
-}
-
-.btn-secondary:active {
-  transform: translateY(2px);
-  border-bottom-width: 1px;
-}
-
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-fd-border); }
 
 ::selection {
   background-color: hsl(24 94% 53% / 0.2);
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-in {
-  animation: fadeIn 0.6s ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-  .animate-in {
-    opacity: 1 !important;
-    transform: none !important;
-  }
 }

@@ -20,6 +20,7 @@ ENV HOSTNAME=0.0.0.0
 RUN addgroup -g 1001 -S nodejs && adduser -S app -u 1001 -G nodejs
 COPY --from=build --chown=app:nodejs /app/.next/standalone ./
 COPY --from=build --chown=app:nodejs /app/.next/static ./.next/static
+COPY --from=build --chown=app:nodejs /app/public ./public
 USER app
 EXPOSE 8080
 CMD ["node", "server.js"]
