@@ -8,28 +8,14 @@ export default function Layout({ children }: { children: ReactNode }) {
       tree={source.pageTree}
       nav={{
         title: (
-          <span className="flex items-center gap-2 text-lg font-bold tracking-tight">
-            <img src="/veto-darkmode-icon.png" alt="Veto" width={24} height={24} />
-            <span>
-              <span className="text-fd-primary">veto</span>
-              <span className="text-fd-muted-foreground">/docs</span>
-            </span>
+          <span className="flex items-center gap-1.5">
+            <img src="/veto-darkmode.png" alt="Veto" className="h-5 hidden dark:block" />
+            <img src="/veto-lightmode-full.png" alt="Veto" className="h-5 dark:hidden" />
+            <span className="text-fd-muted-foreground text-sm font-normal">/docs</span>
           </span>
         ),
         url: '/',
       }}
-      links={[
-        {
-          text: 'GitHub',
-          url: 'https://github.com/vetoai',
-          external: true,
-        },
-        {
-          text: 'runveto.com',
-          url: 'https://runveto.com',
-          external: true,
-        },
-      ]}
       sidebar={{
         footer: (
           <div className="flex flex-col gap-2 border-t border-fd-border px-4 py-4 text-xs text-fd-muted-foreground">
