@@ -1,0 +1,120 @@
+---
+title: GET /v1/approvals/:id
+description: Poll an approval record — used by the SDK to wait for human review.
+---
+
+When the validation endpoint returns `require_approval`, the SDK polls this endpoint until the approval is resolved by a human or expires.
+
+## Request
+
+```
+GET /v1/approvals/:id
+```
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Veto-API-Key` | Yes | API key for authentication |
+
+### Path parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `string` | The approval ID returned by the validate endpoint |
+
+## Response
+
+### Pending
+
+```json
+{
+  "id": "apr_abc123def456",
+  "status": "pending",
+  "toolName": "transfer_funds",
+  "arguments": { "amount": 5000, "to": "vendor-123" },
+  "createdAt": "2025-01-15T10:30:00Z",
+  "expiresAt": "2025-01-15T10:35:00Z"
+}
+```
+
+### Approved
+
+```json
+{
+  "id": "apr_abc123def456",
+  "status": "approved",
+  "toolName": "transfer_funds",
+  "resolvedBy": "user@company.com",
+  "resolvedAt": "2025-01-15T10:31:15Z"
+}
+```
+
+### Denied
+
+```json
+{
+  "id": "apr_abc123def456",
+  "status": "denied",
+  "toolName": "transfer_funds",
+  "resolvedBy": "user@company.com",
+  "resolvedAt": "2025-01-15T10:31:15Z"
+}
+```
+
+### Expired
+
+```json
+{
+  "id": "apr_abc123def456",
+  "status": "expired",
+  "toolName": "transfer_funds",
+  "expiresAt": "2025-01-15T10:35:00Z"
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Approval record ID |
+| `status` | `"pending" \| "approved" \| "denied" \| "expired"` | Current status |
+| `toolName` | `string` | Name of the tool awaiting approval |
+| `arguments` | `object?` | Tool call arguments (included while pending) |
+| `resolvedBy` | `string?` | Who resolved the approval |
+| `resolvedAt` | `string?` | ISO 8601 timestamp of resolution |
+| `createdAt` | `string?` | ISO 8601 timestamp of creation |
+| `expiresAt` | `string?` | ISO 8601 timestamp of expiration |
+
+## SDK behavior
+
+The SDK handles polling automatically. You do not need to call this endpoint directly. The polling flow:
+
+1. Validate endpoint returns `{ decision: "require_approval", approval_id: "apr_..." }`
+2. SDK fires the `onApprovalRequired` / `on_approval_required` hook
+3. SDK polls `GET /v1/approvals/:id` every 2 seconds (configurable)
+4. When status changes from `pending`, SDK returns the decision to the agent
+5. If the poll exceeds the timeout (default 5 minutes), SDK throws `ApprovalTimeoutError`
+
+```
+Agent calls tool
+       │
+       ▼
+SDK validates with cloud ──── allow ──── Tool executes
+       │
+       ├── deny ──── ToolCallDeniedError
+       │
+       └── require_approval
+              │
+              ▼
+       Fire onApprovalRequired hook
+              │
+              ▼
+       Poll GET /v1/approvals/:id
+              │
+       ┌──────┼──────┐
+       │      │      │
+  approved  denied  expired/timeout
+       │      │      │
+  Tool runs  Error  Error
+```

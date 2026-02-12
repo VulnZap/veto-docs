@@ -1,32 +1,64 @@
 ---
 title: Validation Modes
-description: How Veto validates tool calls — API, custom, and kernel modes.
+description: How Veto validates tool calls — cloud, API, custom, and kernel modes.
 ---
 
-Veto supports three validation modes, configured in `veto.config.yaml`:
+Veto supports four validation modes, configured in `veto.config.yaml`:
 
 ```yaml
 validation:
-  mode: "custom"  # "api", "custom", or "kernel"
+  mode: "cloud"  # "cloud", "api", "custom", or "kernel"
 ```
+
+## Cloud mode
+
+Routes validation through the Veto Cloud API with full policy management, decision logging, and human-in-the-loop approval workflows.
+
+```yaml
+validation:
+  mode: "cloud"
+
+cloud:
+  apiKey: "veto_abc123..."
+  baseUrl: "https://api.runveto.com"
+  timeout: 30000
+  retries: 2
+
+approval:
+  pollInterval: 2000   # ms between polls
+  timeout: 300000      # max ms to wait (5 min)
+```
+
+The cloud can return three decisions:
+
+| Decision | What happens |
+|----------|-------------|
+| `allow` | Tool call proceeds |
+| `deny` | Tool call is blocked |
+| `require_approval` | SDK pauses and polls until a human approves or denies |
+
+When `require_approval` is returned, the SDK fires the `onApprovalRequired` hook (TypeScript) or `on_approval_required` callback (Python), then polls `GET /v1/approvals/:id` until resolved. This enables integrations like the Veto dashboard to present approve/deny UI to a human reviewer.
+
+Best for production deployments. Provides:
+- Centralized policy management via the dashboard at [runveto.com](https://runveto.com)
+- Deterministic and LLM-assisted validation
+- Real-time decision logging
+- Human-in-the-loop approval workflows
+- Team-wide visibility and audit trails
 
 ## API mode
 
-Sends validation requests to the Veto server at `POST /v1/validate`.
+Sends validation requests to a self-hosted or external validation API at `POST /tool/call/check`.
 
 ```yaml
 validation:
   mode: "api"
   api:
-    url: "https://api.runveto.com"
-    key: "veto_abc123..."
+    url: "http://localhost:8080"
+    endpoint: "/tool/call/check"
 ```
 
-Best for production deployments with the Veto dashboard. Provides:
-- Centralized policy management
-- Real-time decision logging
-- Approval workflows for escalated calls
-- Team-wide visibility via the dashboard at [runveto.com](https://runveto.com)
+Best for self-hosted deployments or custom validation backends.
 
 ## Custom mode
 

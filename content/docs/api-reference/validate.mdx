@@ -3,12 +3,12 @@ title: POST /v1/validate
 description: Core validation endpoint — validates a tool call against policies.
 ---
 
-The validation endpoint is the hot path. Every tool call intercepted by the SDK hits this endpoint when running in API mode.
+The validation endpoint is the hot path. Every tool call intercepted by the SDK hits this endpoint when running in cloud mode.
 
 ## Request
 
 ```
-POST /v1/validate
+POST /v1/tools/validate
 ```
 
 ### Headers
@@ -22,7 +22,7 @@ POST /v1/validate
 
 ```json
 {
-  "tool": "send_email",
+  "tool_name": "send_email",
   "arguments": {
     "to": "user@example.com",
     "subject": "Hello",
@@ -33,8 +33,9 @@ POST /v1/validate
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `tool` | `string` | Yes | Name of the tool being called |
+| `tool_name` | `string` | Yes | Name of the tool being called |
 | `arguments` | `object` | Yes | Arguments passed to the tool |
+| `context` | `object` | No | Additional metadata (call_id, session_id, etc.) |
 
 ## Response
 
@@ -53,18 +54,41 @@ POST /v1/validate
 {
   "decision": "deny",
   "reason": "Rule limit-transfers: amount 5000 exceeds limit of 1000",
-  "rule_id": "limit-transfers",
+  "failed_constraints": [
+    {
+      "parameter": "amount",
+      "constraint_type": "range",
+      "expected": 1000,
+      "actual": 5000,
+      "message": "amount 5000 exceeds maximum of 1000"
+    }
+  ],
   "latency_ms": 12
 }
 ```
+
+### Requires approval
+
+```json
+{
+  "decision": "require_approval",
+  "reason": "This tool call requires human review",
+  "approval_id": "apr_abc123def456",
+  "latency_ms": 30
+}
+```
+
+When the SDK receives `require_approval`, it automatically begins polling `GET /v1/approvals/:id` until the approval is resolved. See [Approvals](/docs/api-reference/approvals).
 
 ### Response fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `decision` | `"allow" \| "deny"` | Validation result |
-| `reason` | `string?` | Explanation when denied |
-| `rule_id` | `string?` | ID of the rule that triggered denial |
+| `decision` | `"allow" \| "deny" \| "require_approval"` | Validation result |
+| `reason` | `string?` | Explanation when denied or escalated |
+| `failed_constraints` | `array?` | Details of constraint violations |
+| `approval_id` | `string?` | Approval record ID (only with `require_approval`) |
+| `metadata` | `object?` | Additional metadata from the server |
 | `latency_ms` | `number` | Server-side processing time |
 
 ## Authentication
@@ -72,11 +96,11 @@ POST /v1/validate
 The API key is created in the Veto dashboard or via the `POST /v1/api-keys` endpoint. Each key is scoped to an organization and project.
 
 ```bash
-curl -X POST https://api.runveto.com/v1/validate \
+curl -X POST https://api.runveto.com/v1/tools/validate \
   -H "X-Veto-API-Key: veto_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
-    "tool": "transfer_funds",
+    "tool_name": "transfer_funds",
     "arguments": { "amount": 500, "to": "vendor-123" }
   }'
 ```

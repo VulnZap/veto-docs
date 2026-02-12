@@ -11,9 +11,9 @@ The agent is unaware of the guardrail. The tool interface is preserved.
 
 1. AI agent calls a tool (e.g. `send_email({to: "...", body: "..."})`)
 2. Veto intercepts the call via the SDK
-3. Arguments are validated against your rules (YAML constraints + LLM semantic checks)
-4. The call is allowed, blocked, or escalated based on the result
-5. If allowed, the tool executes normally. If blocked, the agent receives an error
+3. Arguments are validated against your policies (deterministic constraints + LLM semantic checks)
+4. The call is allowed, blocked, or escalated for human approval
+5. If allowed, the tool executes normally. If blocked, the agent receives an error. If escalated, a human reviewer approves or denies.
 
 ```
 ┌──────────┐     ┌───────┐     ┌──────────┐
@@ -22,6 +22,12 @@ The agent is unaware of the guardrail. The tool interface is preserved.
 │  calls   │     │ rules │     │ execute  │
 │  tools   │     │ + LLM │     │ actions  │
 └──────────┘     └───────┘     └──────────┘
+                    │
+                    ▼
+              ┌──────────┐
+              │  Human   │
+              │ Approval │
+              └──────────┘
 ```
 
 ## Features
@@ -29,8 +35,10 @@ The agent is unaware of the guardrail. The tool interface is preserved.
 - **Provider agnostic** — works with OpenAI, Anthropic, Google, LangChain, Vercel AI SDK
 - **YAML rules** — define constraints with simple, declarative YAML
 - **LLM validation** — semantic checks for cases static rules can't cover
-- **Multiple validation modes** — API (remote server), custom (direct LLM), or kernel (local Ollama)
-- **TypeScript + Python SDKs** — first-class support for both languages
+- **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
+- **Approval preferences** — cache approve/deny decisions per tool to skip repeated reviews
+- **Multiple validation modes** — cloud (managed), API (self-hosted), custom (direct LLM), or kernel (local Ollama)
+- **TypeScript + Python SDKs** — first-class support for both languages with identical APIs
 - **Dashboard** — real-time monitoring at [runveto.com](https://runveto.com)
 
 ## Quick example
@@ -38,11 +46,16 @@ The agent is unaware of the guardrail. The tool interface is preserved.
 ```typescript
 import { Veto } from 'veto-sdk';
 
-const veto = await Veto.init();
+const veto = await Veto.init({
+  onApprovalRequired: (context, approvalId) => {
+    console.log(`"${context.toolName}" needs approval: ${approvalId}`);
+  },
+});
+
 const wrappedTools = veto.wrap(myTools);
 
 // Pass wrapped tools to your agent — it works exactly the same,
-// but every call is now validated against your rules
+// but every call is now validated against your policies
 const agent = createAgent({ tools: wrappedTools });
 ```
 
@@ -51,3 +64,4 @@ const agent = createAgent({ tools: wrappedTools });
 - [Installation](/docs/getting-started/installation) — install the SDK for TypeScript or Python
 - [Quick Start](/docs/getting-started/quick-start) — get Veto running in 5 minutes
 - [Rule Format](/docs/rules/yaml-format) — learn the YAML rule syntax
+- [Validation Modes](/docs/rules/validation-modes) — cloud, API, custom, and kernel modes
