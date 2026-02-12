@@ -1,6 +1,6 @@
 ---
 title: TypeScript SDK
-description: Full API reference for the Veto TypeScript SDK.
+description: Full API reference for the Veto TypeScript SDK (v1.3.0).
 ---
 
 ## Installation
@@ -18,6 +18,19 @@ import { Veto } from 'veto-sdk';
 
 const veto = await Veto.init();
 ```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `configDir` | `string` | `"./veto"` | Path to config directory |
+| `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
+| `logLevel` | `string` | `"info"` | Log level |
+| `sessionId` | `string` | — | Session ID for tracking |
+| `agentId` | `string` | — | Agent ID for tracking |
+| `validators` | `Validator[]` | — | Additional validators |
+| `cloudClient` | `VetoCloudClient` | — | Injected cloud client |
+| `onApprovalRequired` | `(context, approvalId) => void` | — | Hook fired when a tool call needs human approval |
 
 ## `veto.wrap<T>(tools: T[]): T[]`
 
@@ -72,6 +85,137 @@ try {
 }
 ```
 
+When an approval poll times out, Veto throws an `ApprovalTimeoutError`:
+
+```typescript
+import { ApprovalTimeoutError } from 'veto-sdk/cloud';
+
+try {
+  await wrappedTool.invoke(args);
+} catch (error) {
+  if (error instanceof ApprovalTimeoutError) {
+    console.log(error.approvalId);  // "apr_abc123"
+    console.log(error.timeoutMs);   // 300000
+  }
+}
+```
+
+## Cloud validation and approvals
+
+When using `cloud` validation mode, the SDK routes tool calls through the Veto Cloud API. The server can return three decisions: `allow`, `deny`, or `require_approval`.
+
+When a tool call requires approval, the SDK:
+
+1. Fires the `onApprovalRequired` hook (so your app can show approval UI)
+2. Polls `GET /v1/approvals/:id` until a human approves or denies
+3. Returns the final decision to the agent
+
+```typescript
+const veto = await Veto.init({
+  onApprovalRequired: (context, approvalId) => {
+    // Show approval UI to the user
+    console.log(`Tool "${context.toolName}" needs approval: ${approvalId}`);
+  },
+});
+```
+
+### Configuration
+
+Configure approval polling in `veto.config.yaml`:
+
+```yaml
+validation:
+  mode: "cloud"
+
+cloud:
+  apiKey: "veto_abc123..."
+  baseUrl: "https://api.runveto.com"
+
+approval:
+  pollInterval: 2000   # ms between polls (default: 2000)
+  timeout: 300000      # max ms to wait (default: 300000 = 5 min)
+```
+
+### Approval preference cache
+
+Cache per-tool preferences to auto-resolve approvals without server polling:
+
+```typescript
+// Auto-approve all future calls to "read_file"
+veto.setApprovalPreference('read_file', 'approve_all');
+
+// Auto-deny all future calls to "delete_database"
+veto.setApprovalPreference('delete_database', 'deny_all');
+
+// Check current preference
+veto.getApprovalPreference('read_file'); // "approve_all"
+
+// Clear preference for one tool
+veto.clearApprovalPreferences('read_file');
+
+// Clear all preferences
+veto.clearApprovalPreferences();
+```
+
+## `VetoCloudClient`
+
+Standalone client for direct cloud API interaction. Used internally by `Veto`, but also available for advanced use cases.
+
+```typescript
+import { VetoCloudClient } from 'veto-sdk/cloud';
+
+const client = new VetoCloudClient({
+  config: {
+    apiKey: 'veto_abc123...',
+    baseUrl: 'https://api.runveto.com',
+    timeout: 30000,
+    retries: 2,
+    retryDelay: 1000,
+  },
+  logger,
+});
+```
+
+### `client.validate(toolName, args, context?)`
+
+Validate a tool call against cloud policies.
+
+```typescript
+const result = await client.validate('send_email', {
+  to: 'user@example.com',
+  subject: 'Hello',
+});
+// { decision: "allow" | "deny" | "require_approval", reason?, approval_id? }
+```
+
+### `client.pollApproval(approvalId, options?)`
+
+Poll an approval record until resolved or timed out.
+
+```typescript
+const approval = await client.pollApproval('apr_abc123', {
+  pollInterval: 2000,  // ms
+  timeout: 300000,     // ms
+});
+// { id, toolName, status: "approved" | "denied" | "expired", resolvedBy? }
+```
+
+### `client.registerTools(tools)`
+
+Register tool signatures with the cloud for policy generation.
+
+```typescript
+await client.registerTools([{
+  name: 'send_email',
+  description: 'Send an email',
+  parameters: [
+    { name: 'to', type: 'string', required: true },
+    { name: 'subject', type: 'string', required: true },
+    { name: 'body', type: 'string', required: true },
+  ],
+}]);
+```
+
 ## Provider adapters
 
 The SDK includes adapters that convert tool definitions between formats:
@@ -97,3 +241,5 @@ The SDK publishes multiple entry points:
 | `veto-sdk/rules` | Rule parsing and matching utilities |
 | `veto-sdk/kernel` | Local model evaluation via Ollama |
 | `veto-sdk/custom` | Direct LLM provider integration |
+| `veto-sdk/compiler` | Rule compiler utilities |
+| `veto-sdk/benchmark` | Performance benchmarking |

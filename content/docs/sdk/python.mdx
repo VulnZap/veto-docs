@@ -1,6 +1,6 @@
 ---
 title: Python SDK
-description: Full API reference for the Veto Python SDK.
+description: Full API reference for the Veto Python SDK (v0.3.0).
 ---
 
 ## Installation
@@ -20,7 +20,7 @@ pip install veto[all]         # All providers
 
 ## `Veto.init(options?)`
 
-Initialize Veto. Loads configuration from `./veto` by default.
+Initialize Veto. Uses the `VETO_API_KEY` environment variable by default.
 
 ```python
 from veto import Veto
@@ -28,9 +28,41 @@ from veto import Veto
 veto = await Veto.init()
 ```
 
+### Options
+
+Pass a `VetoOptions` dataclass to customize initialization:
+
+```python
+from veto import Veto, VetoOptions
+
+veto = await Veto.init(VetoOptions(
+    api_key="veto_abc123...",
+    base_url="https://api.runveto.com",
+    mode="strict",
+    on_approval_required=my_approval_handler,
+    approval_poll_interval=2.0,   # seconds
+    approval_timeout=300.0,       # seconds
+))
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `api_key` | `str` | `VETO_API_KEY` env | API key for Veto Cloud |
+| `base_url` | `str` | `"https://api.veto.dev"` | Cloud API base URL |
+| `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
+| `log_level` | `str` | `"info"` | Log level |
+| `session_id` | `str` | — | Session ID for tracking |
+| `agent_id` | `str` | — | Agent ID for tracking |
+| `validators` | `list` | — | Additional validators |
+| `timeout` | `int` | `30000` | API timeout in ms |
+| `retries` | `int` | `2` | Retry count |
+| `on_approval_required` | `callable` | — | Hook fired when a tool call needs human approval |
+| `approval_poll_interval` | `float` | `2.0` | Seconds between approval polls |
+| `approval_timeout` | `float` | `300.0` | Max seconds to wait for approval |
+
 ## `veto.wrap(tools)`
 
-Wraps an array of tools with validation.
+Wraps an array of tools with validation. Auto-registers tool signatures with Veto Cloud for policy generation.
 
 ```python
 wrapped_tools = veto.wrap(my_tools)
@@ -59,6 +91,131 @@ Resets the history statistics.
 
 ```python
 veto.clear_history()
+```
+
+## Error handling
+
+When a tool call is blocked, Veto raises a `ToolCallDeniedError`:
+
+```python
+from veto import ToolCallDeniedError
+
+try:
+    await wrapped_tool.ainvoke(args)
+except ToolCallDeniedError as e:
+    print(e.tool_name)   # "transfer_funds"
+    print(e.call_id)     # "call_abc123"
+```
+
+When an approval poll times out, Veto raises an `ApprovalTimeoutError`:
+
+```python
+from veto.cloud.client import ApprovalTimeoutError
+
+try:
+    await wrapped_tool.ainvoke(args)
+except ApprovalTimeoutError as e:
+    print(e.approval_id)  # "apr_abc123"
+    print(e.timeout)      # 300.0
+```
+
+## Cloud validation and approvals
+
+The Python SDK validates tool calls through the Veto Cloud API. The server can return three decisions: `allow`, `deny`, or `require_approval`.
+
+When a tool call requires approval, the SDK:
+
+1. Fires the `on_approval_required` callback (so your app can show approval UI)
+2. Polls `GET /v1/approvals/:id` until a human approves or denies
+3. Returns the final decision to the agent
+
+```python
+async def handle_approval(context, approval_id):
+    print(f"Tool '{context.tool_name}' needs approval: {approval_id}")
+
+veto = await Veto.init(VetoOptions(
+    on_approval_required=handle_approval,
+))
+```
+
+The callback receives the full `ValidationContext` and the `approval_id` string. It can be sync or async.
+
+### Approval preference cache
+
+Cache per-tool preferences to auto-resolve approvals without server polling:
+
+```python
+# Auto-approve all future calls to "read_file"
+veto.set_approval_preference("read_file", "approve_all")
+
+# Auto-deny all future calls to "delete_database"
+veto.set_approval_preference("delete_database", "deny_all")
+
+# Check current preference
+veto.get_approval_preference("read_file")  # "approve_all"
+
+# Clear preference for one tool
+veto.clear_approval_preferences("read_file")
+
+# Clear all preferences
+veto.clear_approval_preferences()
+```
+
+## `VetoCloudClient`
+
+Standalone client for direct cloud API interaction:
+
+```python
+from veto.cloud.client import VetoCloudClient, VetoCloudConfig
+
+client = VetoCloudClient(
+    config=VetoCloudConfig(
+        api_key="veto_abc123...",
+        base_url="https://api.runveto.com",
+        timeout=30000,
+        retries=2,
+    ),
+)
+```
+
+### `await client.validate(tool_name, arguments, context?)`
+
+```python
+result = await client.validate("send_email", {
+    "to": "user@example.com",
+    "subject": "Hello",
+})
+# ValidationResponse(decision="allow"|"deny"|"require_approval", reason=..., approval_id=...)
+```
+
+### `await client.poll_approval(approval_id, options?)`
+
+```python
+from veto.cloud.types import ApprovalPollOptions
+
+approval = await client.poll_approval("apr_abc123", ApprovalPollOptions(
+    poll_interval=2.0,  # seconds
+    timeout=300.0,      # seconds
+))
+# ApprovalData(id=..., status="approved"|"denied"|"expired", resolved_by=...)
+```
+
+### `await client.register_tools(tools)`
+
+```python
+from veto.cloud.types import ToolRegistration, ToolParameter
+
+await client.register_tools([
+    ToolRegistration(
+        name="send_email",
+        description="Send an email",
+        parameters=[
+            ToolParameter(name="to", type="string", required=True),
+            ToolParameter(name="subject", type="string", required=True),
+            ToolParameter(name="body", type="string", required=True),
+        ],
+    ),
+])
 ```
 
 ## CLI commands

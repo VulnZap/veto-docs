@@ -60,11 +60,10 @@ version: "1.0"
 mode: "strict"
 
 validation:
-  mode: "custom"     # "api", "kernel", or "custom"
+  mode: "cloud"     # "cloud", "api", "custom", or "kernel"
 
-custom:
-  provider: "openai"
-  model: "gpt-4o-mini"
+cloud:
+  apiKey: "veto_abc123..."
 
 rules:
   directory: "./rules"
@@ -73,7 +72,8 @@ rules:
 
 | Mode | How it works | When to use |
 |------|-------------|-------------|
-| `api` | Sends validation requests to the Veto server | Production with dashboard |
+| `cloud` | Validates via Veto Cloud API with approval workflows | Production with dashboard + human-in-the-loop |
+| `api` | Sends validation requests to a self-hosted API | Self-hosted deployments |
 | `custom` | Calls an LLM provider directly | Development, no server needed |
 | `kernel` | Uses a local Ollama model | Offline, air-gapped environments |
 
