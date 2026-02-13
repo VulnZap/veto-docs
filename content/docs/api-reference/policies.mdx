@@ -1,0 +1,349 @@
+---
+title: Policies API
+description: CRUD endpoints for managing tool policies — the rules that govern what tool calls are allowed.
+---
+
+Policies define the validation rules for each tool. Each policy is scoped to an organization and identified by tool name (one policy per tool).
+
+All endpoints require authentication via API key (`X-Veto-API-Key`) or Bearer JWT with `X-Organization-Id` header.
+
+## List policies
+
+```
+GET /v1/policies
+```
+
+Returns all policies for the authenticated organization.
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "toolName": "transfer_funds",
+      "version": 3,
+      "isActive": true,
+      "mode": "deterministic",
+      "constraints": [
+        {
+          "argumentName": "amount",
+          "enabled": true,
+          "minimum": 0,
+          "maximum": 10000,
+          "required": true
+        },
+        {
+          "argumentName": "currency",
+          "enabled": true,
+          "enum": ["USD", "EUR", "GBP"]
+        }
+      ],
+      "createdAt": "2025-01-15T10:00:00Z",
+      "updatedAt": "2025-01-20T14:30:00Z"
+    }
+  ]
+}
+```
+
+## Get policy
+
+```
+GET /v1/policies/:toolName
+```
+
+Returns the policy for a specific tool, including the tool definition if registered.
+
+### Response
+
+```json
+{
+  "toolName": "transfer_funds",
+  "version": 3,
+  "isActive": true,
+  "mode": "deterministic",
+  "constraints": [
+    {
+      "argumentName": "amount",
+      "enabled": true,
+      "minimum": 0,
+      "maximum": 10000,
+      "required": true
+    }
+  ],
+  "sessionConstraints": {
+    "maxCalls": 5,
+    "cumulativeLimits": [
+      { "argumentName": "amount", "maxValue": 50000 }
+    ]
+  },
+  "tool": {
+    "name": "transfer_funds",
+    "description": "Transfer money to an account",
+    "arguments": [
+      { "name": "amount", "type": "number", "required": true },
+      { "name": "to", "type": "string", "required": true }
+    ]
+  },
+  "createdAt": "2025-01-15T10:00:00Z",
+  "updatedAt": "2025-01-20T14:30:00Z"
+}
+```
+
+The SDK calls this endpoint to fetch and cache policies for client-side deterministic validation. See [How Validation Works](/docs/concepts/how-it-works).
+
+### Error: not found
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "Policy not found: transfer_funds"
+  }
+}
+```
+
+## Create policy
+
+```
+POST /v1/policies
+```
+
+### Body
+
+```json
+{
+  "toolName": "send_email",
+  "mode": "deterministic",
+  "constraints": [
+    {
+      "argumentName": "to",
+      "enabled": true,
+      "required": true,
+      "regex": "^[^@]+@(company\\.com|partner\\.org)$"
+    },
+    {
+      "argumentName": "body",
+      "enabled": true,
+      "maxLength": 5000
+    }
+  ]
+}
+```
+
+### LLM policy
+
+```json
+{
+  "toolName": "send_email",
+  "mode": "llm",
+  "llmConfig": {
+    "description": "Only allow emails to verified contacts about business topics",
+    "exceptions": ["Emergency notifications are always allowed"],
+    "argumentInstructions": [
+      {
+        "argumentName": "body",
+        "instruction": "Must not contain personally identifiable information"
+      }
+    ],
+    "preferredModel": "anthropic"
+  }
+}
+```
+
+### Session constraints
+
+```json
+{
+  "toolName": "delete_record",
+  "mode": "deterministic",
+  "constraints": [
+    { "argumentName": "id", "enabled": true, "required": true }
+  ],
+  "sessionConstraints": {
+    "maxCalls": 3,
+    "cumulativeLimits": [
+      { "argumentName": "count", "maxValue": 100 }
+    ]
+  }
+}
+```
+
+### Response: 201
+
+```json
+{
+  "toolName": "send_email",
+  "version": 1,
+  "isActive": true,
+  "mode": "deterministic",
+  "constraints": [...],
+  "quality": { "valid": true, "score": 0.95, "issues": [] },
+  "createdAt": "2025-01-20T14:30:00Z"
+}
+```
+
+### Error: 409 conflict
+
+```json
+{
+  "error": {
+    "code": "policy_exists",
+    "message": "Policy for tool 'send_email' already exists"
+  }
+}
+```
+
+## Update policy
+
+```
+PUT /v1/policies/:toolName
+```
+
+Replaces the policy for a tool. Increments the version number. Invalidates the cached policy on all connected SDKs.
+
+### Body
+
+Same schema as create, without `toolName` (taken from the URL).
+
+```json
+{
+  "mode": "deterministic",
+  "constraints": [
+    {
+      "argumentName": "amount",
+      "enabled": true,
+      "minimum": 0,
+      "maximum": 5000
+    }
+  ]
+}
+```
+
+### Response
+
+```json
+{
+  "toolName": "transfer_funds",
+  "version": 4,
+  "isActive": true,
+  "mode": "deterministic",
+  "constraints": [...],
+  "quality": { "valid": true, "score": 0.9, "issues": [] },
+  "updatedAt": "2025-01-21T09:00:00Z"
+}
+```
+
+## Delete policy
+
+```
+DELETE /v1/policies/:toolName
+```
+
+Removes the policy and invalidates any cached copies.
+
+### Response
+
+```json
+{
+  "success": true
+}
+```
+
+## Activate / deactivate
+
+Toggle a policy without deleting it.
+
+```
+POST /v1/policies/:toolName/activate
+POST /v1/policies/:toolName/deactivate
+```
+
+### Response
+
+```json
+{
+  "success": true,
+  "message": "Policy for 'transfer_funds' deactivated"
+}
+```
+
+When deactivated, the policy is skipped during validation — tool calls pass through without checks.
+
+## Validate policy (dry run)
+
+Check a policy configuration for quality issues before saving it.
+
+```
+POST /v1/policies/:toolName/validate
+```
+
+### Body
+
+Same schema as create/update.
+
+### Response
+
+```json
+{
+  "valid": true,
+  "score": 0.95,
+  "issues": []
+}
+```
+
+Or with issues:
+
+```json
+{
+  "valid": false,
+  "score": 0.4,
+  "issues": [
+    "Constraint on 'amount' has minimum > maximum",
+    "LLM config description is empty"
+  ]
+}
+```
+
+## Constraint fields
+
+Each constraint in the `constraints` array targets one argument:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `argumentName` | `string` | The tool argument this constraint applies to |
+| `enabled` | `boolean` | Whether this constraint is active |
+| `required` | `boolean?` | Argument must be present |
+| `notNull` | `boolean?` | Argument cannot be null |
+| `minimum` | `number?` | Value must be ≥ threshold |
+| `maximum` | `number?` | Value must be ≤ threshold |
+| `greaterThan` | `number?` | Value must be {">"} threshold |
+| `lessThan` | `number?` | Value must be {"<"} threshold |
+| `greaterThanOrEqual` | `number?` | Alias for `minimum` |
+| `lessThanOrEqual` | `number?` | Alias for `maximum` |
+| `minLength` | `number?` | String must be at least N characters |
+| `maxLength` | `number?` | String must be at most N characters |
+| `enum` | `string[]?` | Value must exactly match one of the allowed strings |
+| `regex` | `string?` | Value must match the pattern (max 256 chars, ReDoS-safe) |
+| `minItems` | `number?` | Array must have at least N elements |
+| `maxItems` | `number?` | Array must have at most N elements |
+
+See [Constraints Reference](/docs/concepts/constraints) for detailed behavior and examples.
+
+## LLM config fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `description` | `string` | Natural language policy the LLM evaluates against |
+| `exceptions` | `string[]` | Conditions where the policy should not apply |
+| `argumentInstructions` | `array?` | Per-argument instructions for the LLM |
+| `preferredModel` | `string?` | `"openai"`, `"anthropic"`, or `"google"` |
+
+## Session constraint fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `maxCalls` | `number?` | Maximum calls to this tool per session |
+| `cumulativeLimits` | `array?` | Cap cumulative argument values across calls |
+| `cumulativeLimits[].argumentName` | `string` | Argument to track |
+| `cumulativeLimits[].maxValue` | `number` | Maximum cumulative value |

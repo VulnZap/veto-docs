@@ -3,65 +3,92 @@ title: Validation Modes
 description: How Veto validates tool calls — cloud, API, custom, and kernel modes.
 ---
 
-Veto supports four validation modes, configured in `veto.config.yaml`:
+Veto supports four validation modes. Set the mode in `veto.config.yaml`:
 
 ```yaml
 validation:
-  mode: "cloud"  # "cloud", "api", "custom", or "kernel"
+  mode: "cloud"  # "cloud" | "api" | "custom" | "kernel"
 ```
 
-## Cloud mode
+## Cloud mode (recommended)
 
-Routes validation through the Veto Cloud API with full policy management, decision logging, and human-in-the-loop approval workflows.
+Routes validation through the Veto Cloud API. Policies are managed in the [dashboard](https://runveto.com) — the SDK fetches and caches them automatically.
 
 ```yaml
 validation:
   mode: "cloud"
 
 cloud:
-  apiKey: "veto_abc123..."
+  apiKey: "veto_abc123..."   # or set VETO_API_KEY env var
   baseUrl: "https://api.runveto.com"
   timeout: 30000
   retries: 2
 
 approval:
   pollInterval: 2000   # ms between polls
-  timeout: 300000      # max ms to wait (5 min)
+  timeout: 300000      # max wait (5 min)
 ```
+
+### Three validation paths
+
+Cloud mode uses the fastest validation path that can handle each policy:
+
+| Path | Where it runs | Latency | When it triggers |
+|------|--------------|---------|-----------------|
+| **Client-side deterministic** | SDK (local) | ~1-5ms | Policy is cached, mode is `deterministic`, no session/rate constraints |
+| **Server-side deterministic** | Veto Cloud | ~30-50ms | Cache miss, or policy has session constraints or rate limits |
+| **Server-side LLM** | Veto Cloud | ~500-2000ms | Policy mode is `llm` |
+
+The SDK picks the path automatically. You configure the policy — the routing is handled for you.
+
+### Client-side deterministic
+
+When the SDK has a cached deterministic policy with no session or rate constraints, it evaluates constraints locally. No network call. Decisions are logged to the server asynchronously via `POST /v1/decisions` so the dashboard stays accurate.
+
+Supported constraints: `minimum`, `maximum`, `greaterThan`, `lessThan`, `enum`, `regex`, `minLength`, `maxLength`, `minItems`, `maxItems`, `required`, `notNull`. See [Constraints Reference](/docs/concepts/constraints).
+
+### Server-side deterministic
+
+Same constraint types, plus stateful checks that require server coordination:
+
+- **Session constraints** — e.g. "max 3 calls to `delete_record` per session"
+- **Rate limits** — e.g. "max 10 calls per minute"
+- **Cross-tool constraints** — e.g. "if `read_file` was called, block `send_email`"
+
+### Server-side LLM
+
+An LLM evaluates the tool call against natural language policies. Use this for checks that can't be expressed as static constraints:
+
+- Semantic evaluation against a policy description
+- Exception lists (e.g. "deny transfers to external accounts, except for verified vendors")
+- Complex multi-argument relationships
+- Context-dependent decisions
+
+### Three decisions
 
 The cloud can return three decisions:
 
 | Decision | What happens |
 |----------|-------------|
 | `allow` | Tool call proceeds |
-| `deny` | Tool call is blocked |
-| `require_approval` | SDK pauses and polls until a human approves or denies |
+| `deny` | `ToolCallDeniedError` is thrown |
+| `require_approval` | SDK pauses and polls until a human approves or denies in the dashboard |
 
-When `require_approval` is returned, the SDK fires the `onApprovalRequired` hook (TypeScript) or `on_approval_required` callback (Python), then polls `GET /v1/approvals/:id` until resolved. This enables integrations like the Veto dashboard to present approve/deny UI to a human reviewer.
+### Policy cache
 
-### Client-side fast path
+Policies are cached with stale-while-revalidate:
 
-In cloud mode, the SDK caches policies locally and evaluates deterministic constraints without a network round-trip. This happens automatically when:
+| Window | Duration | Behavior |
+|--------|----------|----------|
+| **Fresh** | 0–60s | Serve from cache |
+| **Stale** | 60s–5min | Serve from cache, refresh in background |
+| **Expired** | >5min | Fall through to server |
 
-1. The tool's policy is cached (fetched on first call, refreshed in background)
-2. The policy mode is `deterministic` (not `llm`)
-3. The policy has no session constraints or rate limits
-
-When all three conditions are met, validation runs in the SDK (~1-5ms). The decision is logged to the server asynchronously via `POST /v1/decisions` so the dashboard stays accurate.
-
-If any condition is not met, the SDK falls through to `POST /v1/validate` as before.
-
-Best for production deployments. Provides:
-- Centralized policy management via the dashboard at [runveto.com](https://runveto.com)
-- Client-side deterministic validation with zero-latency cache hits
-- Deterministic and LLM-assisted validation
-- Real-time decision logging
-- Human-in-the-loop approval workflows
-- Team-wide visibility and audit trails
+Policy changes in the dashboard propagate to all connected SDKs within 60 seconds.
 
 ## API mode
 
-Sends validation requests to a self-hosted or external validation API at `POST /tool/call/check`.
+Sends validation requests to a self-hosted endpoint. Use this when you want full control over the validation backend.
 
 ```yaml
 validation:
@@ -71,22 +98,20 @@ validation:
     endpoint: "/tool/call/check"
 ```
 
-Best for self-hosted deployments or custom validation backends.
+The endpoint receives the tool name and arguments as JSON and must return `{ decision: "allow" | "deny" }`.
 
 ## Custom mode
 
-Calls an LLM provider directly from the SDK. No server needed.
+Calls an LLM provider directly from the SDK. No server needed. Rules are evaluated using the LLM with the YAML rules in your `veto/rules/` directory.
 
 ```yaml
 validation:
   mode: "custom"
 
 custom:
-  provider: "openai"     # openai, anthropic, or gemini
+  provider: "openai"     # openai | anthropic | gemini
   model: "gpt-4o-mini"
 ```
-
-Supported providers:
 
 | Provider | Models | Env variable |
 |----------|--------|-------------|
@@ -94,11 +119,11 @@ Supported providers:
 | `anthropic` | `claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY` |
 | `gemini` | `gemini-3-flash-preview` | `GOOGLE_API_KEY` |
 
-Best for development and testing. Rules are evaluated locally using the LLM.
+Best for development and testing when you don't need the dashboard or audit trails.
 
 ## Kernel mode
 
-Uses a local Ollama model for fully offline validation.
+Uses a local Ollama model for fully offline validation. Zero external API calls.
 
 ```yaml
 validation:
@@ -109,11 +134,11 @@ kernel:
   model: "llama3"
 ```
 
-Requires [Ollama](https://ollama.ai) running locally. Best for air-gapped environments or when you need zero external API calls.
+Requires [Ollama](https://ollama.ai) running locally. Best for air-gapped environments.
 
 ## Operating modes
 
-Separate from validation mode, Veto has two operating modes:
+Orthogonal to validation mode, Veto has two operating modes that control what happens when a tool call is denied:
 
 ```yaml
 mode: "strict"  # or "log"
@@ -124,4 +149,4 @@ mode: "strict"  # or "log"
 | `strict` | Blocks denied calls — throws `ToolCallDeniedError` |
 | `log` | Logs denied calls but allows execution to continue |
 
-Use `log` mode during initial rollout to observe what would be blocked without affecting agent behavior.
+Use `log` mode during initial rollout to observe what would be blocked without affecting agent behavior. Switch to `strict` once you're confident in your policies.

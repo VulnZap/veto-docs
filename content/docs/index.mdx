@@ -3,66 +3,67 @@ title: What is Veto?
 description: The permission layer for AI agents. Intercept, validate, and control every tool call.
 ---
 
-Veto is a guardrail system for AI agent tool calls. It sits between an AI agent and its tools — intercepting every tool call, validating it against rules and policies, and allowing, blocking, or escalating for human approval.
-
-The agent is unaware of the guardrail. The tool interface is preserved.
-
-## How it works
-
-1. AI agent calls a tool (e.g. `send_email({to: "...", body: "..."})`)
-2. Veto intercepts the call via the SDK
-3. Arguments are validated against your policies (deterministic constraints + LLM semantic checks)
-4. The call is allowed, blocked, or escalated for human approval
-5. If allowed, the tool executes normally. If blocked, the agent receives an error. If escalated, a human reviewer approves or denies.
+Veto sits between an AI agent and its tools. Every tool call is intercepted, validated against your policies, and either allowed, blocked, or escalated for human approval. The agent never knows the guardrail exists.
 
 ```
-┌──────────┐     ┌───────┐     ┌──────────┐
-│ AI Agent │────▶│ Veto  │────▶│  Tools   │
-│          │     │       │     │          │
-│  calls   │     │ rules │     │ execute  │
-│  tools   │     │ + LLM │     │ actions  │
-└──────────┘     └───────┘     └──────────┘
-                    │
-                    ▼
-              ┌──────────┐
-              │  Human   │
-              │ Approval │
-              └──────────┘
+Agent calls tool ──▶ Veto validates ──▶ Tool executes
+                         │
+                    ┌────┴────┐
+                    │         │
+                  allow     deny / require approval
 ```
 
-## Features
+## Three validation paths
 
-- **Provider agnostic** — works with OpenAI, Anthropic, Google, LangChain, Vercel AI SDK
-- **YAML rules** — define constraints with simple, declarative YAML
-- **Client-side validation** — deterministic constraints evaluated locally with zero network latency. Policies synced from the cloud and cached with stale-while-revalidate.
-- **LLM validation** — semantic checks for cases static rules can't cover
-- **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
-- **Approval preferences** — cache approve/deny decisions per tool to skip repeated reviews
-- **Multiple validation modes** — cloud (managed), API (self-hosted), custom (direct LLM), or kernel (local Ollama)
-- **TypeScript + Python SDKs** — first-class support for both languages with identical APIs
-- **Dashboard** — real-time monitoring at [runveto.com](https://runveto.com)
+When using Veto Cloud, tool calls are validated through one of three paths depending on how you configure each tool's policy:
 
-## Quick example
+| Path | Where | Latency | Use case |
+|------|-------|---------|----------|
+| **Client-side deterministic** | SDK | ~1-5ms | Number ranges, string enums, regex, required fields |
+| **Server-side deterministic** | Veto Cloud | ~30-50ms | Same constraints + session limits + rate limits |
+| **Server-side LLM** | Veto Cloud | ~500-2000ms | Semantic checks, exception lists, natural language policies |
+
+The SDK automatically picks the fastest path. Deterministic policies are cached locally and validated without a network call. LLM policies and policies with session/rate constraints always go through the server.
+
+## Get started in 3 steps
+
+**1. Install the SDK**
+
+```bash
+npm install veto-sdk    # TypeScript
+pip install veto        # Python
+```
+
+**2. Get an API key** from the [Veto dashboard](https://runveto.com) and configure policies for your tools.
+
+**3. Wrap your tools**
 
 ```typescript
 import { Veto } from 'veto-sdk';
 
-const veto = await Veto.init({
-  onApprovalRequired: (context, approvalId) => {
-    console.log(`"${context.toolName}" needs approval: ${approvalId}`);
-  },
-});
-
+const veto = await Veto.init();
 const wrappedTools = veto.wrap(myTools);
 
-// Pass wrapped tools to your agent — it works exactly the same,
-// but every call is now validated against your policies
+// Pass wrapped tools to your agent — the interface is identical
 const agent = createAgent({ tools: wrappedTools });
 ```
 
+Every tool call is now validated against your policies. The agent code doesn't change.
+
+## Features
+
+- **Zero-config fast path** — deterministic constraints run locally in the SDK with no network call
+- **Provider agnostic** — OpenAI, Anthropic, Google, LangChain, Vercel AI SDK, browser-use
+- **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
+- **LLM validation** — natural language policies for cases static rules can't cover
+- **Session-aware** — track per-session call counts, argument history, and cross-tool constraints
+- **TypeScript + Python** — identical APIs, identical behavior
+- **Real-time dashboard** — monitor every decision at [runveto.com](https://runveto.com)
+
 ## Next steps
 
-- [Installation](/docs/getting-started/installation) — install the SDK for TypeScript or Python
-- [Quick Start](/docs/getting-started/quick-start) — get Veto running in 5 minutes
-- [Rule Format](/docs/rules/yaml-format) — learn the YAML rule syntax
-- [Validation Modes](/docs/rules/validation-modes) — cloud, API, custom, and kernel modes
+- [Quick Start](/docs/getting-started/quick-start) — end-to-end setup in 5 minutes
+- [How Validation Works](/docs/concepts/how-it-works) — architecture deep dive
+- [Constraints Reference](/docs/concepts/constraints) — every constraint type explained
+- [TypeScript SDK](/docs/sdk/typescript) — full API reference
+- [Python SDK](/docs/sdk/python) — full API reference
