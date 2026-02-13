@@ -34,6 +34,7 @@ The agent is unaware of the guardrail. The tool interface is preserved.
 
 - **Provider agnostic** — works with OpenAI, Anthropic, Google, LangChain, Vercel AI SDK
 - **YAML rules** — define constraints with simple, declarative YAML
+- **Client-side validation** — deterministic constraints evaluated locally with zero network latency. Policies synced from the cloud and cached with stale-while-revalidate.
 - **LLM validation** — semantic checks for cases static rules can't cover
 - **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
 - **Approval preferences** — cache approve/deny decisions per tool to skip repeated reviews

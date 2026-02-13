@@ -1,6 +1,6 @@
 ---
 title: TypeScript SDK
-description: Full API reference for the Veto TypeScript SDK (v1.3.0).
+description: Full API reference for the Veto TypeScript SDK (v1.4.0).
 ---
 
 ## Installation
@@ -157,6 +157,63 @@ veto.clearApprovalPreferences('read_file');
 veto.clearApprovalPreferences();
 ```
 
+## Client-side deterministic validation
+
+When using cloud mode, the SDK can evaluate deterministic constraints locally — no network round-trip needed. Policies are fetched from the cloud and cached with a stale-while-revalidate strategy.
+
+This is automatic. When the SDK has a cached policy for a tool and that policy uses `deterministic` mode without session constraints or rate limits, validation runs entirely in the SDK. The decision is logged back to the server asynchronously so the dashboard stays accurate.
+
+```
+Agent calls tool
+       │
+       ▼
+Check PolicyCache ─── cache miss ─── POST /v1/validate (server)
+       │
+  cache hit (deterministic, no session/rate constraints)
+       │
+       ▼
+Run local validation
+       │
+       ├── allow ─── Tool executes
+       │
+       └── deny ─── ToolCallDeniedError
+       │
+  POST /v1/decisions (fire-and-forget)
+```
+
+### Supported constraint types
+
+| Constraint | Applies to | Description |
+|-----------|-----------|-------------|
+| `required` | all | Argument must be present |
+| `notNull` | all | Argument cannot be null |
+| `minimum` | numbers | Lower bound (inclusive) |
+| `maximum` | numbers | Upper bound (inclusive) |
+| `greaterThan` | numbers | Lower bound (exclusive) |
+| `lessThan` | numbers | Upper bound (exclusive) |
+| `minLength` | strings | Minimum string length |
+| `maxLength` | strings | Maximum string length |
+| `enum` | strings | Allowed exact values |
+| `regex` | strings | Pattern match (max 256 chars, ReDoS-safe) |
+| `minItems` | arrays | Minimum array length |
+| `maxItems` | arrays | Maximum array length |
+
+### Policy cache
+
+Policies are cached with two time windows:
+
+| Window | Default | Behavior |
+|--------|---------|----------|
+| Fresh | 60s | Returns cached policy immediately |
+| Max age | 5min | Returns stale policy while refreshing in background |
+
+After max age, the cache entry expires and the next validation falls through to the server. Background refreshes are deferred to avoid blocking the current validation.
+
+```typescript
+// PolicyCache is initialized automatically in cloud mode.
+// No configuration needed — it uses sensible defaults.
+```
+
 ## `VetoCloudClient`
 
 Standalone client for direct cloud API interaction. Used internally by `Veto`, but also available for advanced use cases.
@@ -198,6 +255,31 @@ const approval = await client.pollApproval('apr_abc123', {
   timeout: 300000,     // ms
 });
 // { id, toolName, status: "approved" | "denied" | "expired", resolvedBy? }
+```
+
+### `client.fetchPolicy(toolName)`
+
+Fetch a tool's policy from the server. Used by `PolicyCache` for background refreshes.
+
+```typescript
+const policy = await client.fetchPolicy('send_email');
+// { toolName, mode, constraints, sessionConstraints?, rateLimits?, version }
+// Returns null on error (404, network failure, etc.)
+```
+
+### `client.logDecision(request)`
+
+Log a client-side validation decision to the server. Fire-and-forget — errors are silently swallowed.
+
+```typescript
+client.logDecision({
+  tool_name: 'send_email',
+  arguments: { to: 'user@example.com' },
+  decision: 'allow',
+  mode: 'deterministic',
+  latency_ms: 2,
+  source: 'client',
+});
 ```
 
 ### `client.registerTools(tools)`

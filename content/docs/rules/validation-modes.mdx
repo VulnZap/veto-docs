@@ -39,8 +39,21 @@ The cloud can return three decisions:
 
 When `require_approval` is returned, the SDK fires the `onApprovalRequired` hook (TypeScript) or `on_approval_required` callback (Python), then polls `GET /v1/approvals/:id` until resolved. This enables integrations like the Veto dashboard to present approve/deny UI to a human reviewer.
 
+### Client-side fast path
+
+In cloud mode, the SDK caches policies locally and evaluates deterministic constraints without a network round-trip. This happens automatically when:
+
+1. The tool's policy is cached (fetched on first call, refreshed in background)
+2. The policy mode is `deterministic` (not `llm`)
+3. The policy has no session constraints or rate limits
+
+When all three conditions are met, validation runs in the SDK (~1-5ms). The decision is logged to the server asynchronously via `POST /v1/decisions` so the dashboard stays accurate.
+
+If any condition is not met, the SDK falls through to `POST /v1/validate` as before.
+
 Best for production deployments. Provides:
 - Centralized policy management via the dashboard at [runveto.com](https://runveto.com)
+- Client-side deterministic validation with zero-latency cache hits
 - Deterministic and LLM-assisted validation
 - Real-time decision logging
 - Human-in-the-loop approval workflows
