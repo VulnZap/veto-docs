@@ -1,85 +1,219 @@
 ---
 title: Quick Start
-description: Get Veto running in 5 minutes.
+description: Get Veto running in 5 minutes with Veto Cloud.
 ---
 
-## 1. Install and initialize
+This guide uses Veto Cloud — the fastest way to get started. You'll need an API key from the [Veto dashboard](https://runveto.com).
+
+## 1. Install the SDK
 
 ```bash
 npm install veto-sdk
+```
+
+Or with Python:
+
+```bash
+pip install veto
+```
+
+## 2. Initialize configuration
+
+```bash
 npx veto init
 ```
 
-## 2. Define a rule
+This creates a `veto/` directory with your config:
 
-Edit `veto/rules/default.yaml`:
-
-```yaml
-rules:
-  - id: limit-transfers
-    name: Limit large transfers
-    action: block
-    tools:
-      - transfer_funds
-    conditions:
-      - field: arguments.amount
-        operator: greater_than
-        value: 1000
+```
+veto/
+├── veto.config.yaml
+└── rules/
+    └── default.yaml
 ```
 
-This rule blocks any call to `transfer_funds` where the amount exceeds 1000.
-
-## 3. Wrap your tools
-
-```typescript
-import { Veto } from 'veto-sdk';
-
-// Your existing tools
-const myTools = [transferFundsTool, sendEmailTool, readFileTool];
-
-// Initialize Veto (loads config from ./veto)
-const veto = await Veto.init();
-
-// Wrap tools with validation
-const wrappedTools = veto.wrap(myTools);
-
-// Pass to your agent — the interface is identical
-const agent = createAgent({
-  tools: wrappedTools,
-});
-```
-
-When the agent calls `transfer_funds({ amount: 5000 })`, Veto intercepts and blocks it. The agent receives a `ToolCallDeniedError` and can try a different approach.
-
-## 4. Configure validation mode
-
-Edit `veto/veto.config.yaml` to choose how validation runs:
+Edit `veto/veto.config.yaml`:
 
 ```yaml
 version: "1.0"
 mode: "strict"
 
 validation:
-  mode: "cloud"     # "cloud", "api", "custom", or "kernel"
+  mode: "cloud"
 
 cloud:
-  apiKey: "veto_abc123..."
-
-rules:
-  directory: "./rules"
-  recursive: true
+  apiKey: "veto_your_key_here"
 ```
 
-| Mode | How it works | When to use |
-|------|-------------|-------------|
-| `cloud` | Validates via Veto Cloud API with approval workflows | Production with dashboard + human-in-the-loop |
-| `api` | Sends validation requests to a self-hosted API | Self-hosted deployments |
-| `custom` | Calls an LLM provider directly | Development, no server needed |
-| `kernel` | Uses a local Ollama model | Offline, air-gapped environments |
+Or set the `VETO_API_KEY` environment variable instead of putting the key in the config file.
+
+## 3. Configure policies in the dashboard
+
+Go to the [Veto dashboard](https://runveto.com) and create policies for your tools. Each policy defines what constraints to check for a specific tool.
+
+**Example:** For a `transfer_funds` tool, you might set:
+- `amount`: maximum 10000, minimum 0, required
+- `currency`: enum ["USD", "EUR", "GBP"]
+
+The SDK fetches these policies automatically and caches them locally for fast validation.
+
+## 4. Wrap your tools
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+const wrappedTools = veto.wrap(myTools);
+
+const agent = createAgent({ tools: wrappedTools });
+```
+
+That's it. Every tool call now goes through Veto.
+
+## What happens next
+
+When the agent calls a tool:
+
+1. **Deterministic policies** are checked locally in ~1-5ms (cached from the cloud)
+2. **LLM policies** are sent to the cloud for semantic validation in ~500-2000ms
+3. **Approval policies** pause execution until a human approves in the dashboard
+4. **Allowed** calls execute normally. **Denied** calls throw `ToolCallDeniedError`.
+5. Every decision is logged to the dashboard for audit and monitoring.
+
+## Framework examples
+
+### OpenAI
+
+```typescript
+import OpenAI from 'openai';
+import { Veto } from 'veto-sdk';
+
+const openai = new OpenAI();
+const veto = await Veto.init();
+
+const tools = veto.wrap([
+  {
+    type: 'function',
+    function: {
+      name: 'transfer_funds',
+      description: 'Transfer money to an account',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: { type: 'number' },
+          to: { type: 'string' },
+        },
+      },
+    },
+  },
+]);
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  tools,
+  messages: [{ role: 'user', content: 'Transfer $500 to Alice' }],
+});
+```
+
+### Anthropic
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import { Veto } from 'veto-sdk';
+
+const anthropic = new Anthropic();
+const veto = await Veto.init();
+
+const tools = veto.wrap([
+  {
+    name: 'send_email',
+    description: 'Send an email',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string' },
+        subject: { type: 'string' },
+        body: { type: 'string' },
+      },
+    },
+  },
+]);
+
+const response = await anthropic.messages.create({
+  model: 'claude-sonnet-4-5-20250929',
+  max_tokens: 1024,
+  tools,
+  messages: [{ role: 'user', content: 'Email the team about the outage' }],
+});
+```
+
+### Vercel AI SDK
+
+```typescript
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { Veto } from 'veto-sdk';
+import { z } from 'zod';
+
+const veto = await Veto.init();
+
+const tools = veto.wrap({
+  transferFunds: tool({
+    description: 'Transfer money',
+    parameters: z.object({
+      amount: z.number(),
+      to: z.string(),
+    }),
+    execute: async ({ amount, to }) => {
+      return { success: true, amount, to };
+    },
+  }),
+});
+
+const result = await generateText({
+  model: openai('gpt-4o'),
+  tools,
+  prompt: 'Transfer $500 to Alice',
+});
+```
+
+### Python (OpenAI)
+
+```python
+from openai import OpenAI
+from veto import Veto
+
+client = OpenAI()
+veto = await Veto.init()
+
+tools = veto.wrap([
+    {
+        "type": "function",
+        "function": {
+            "name": "transfer_funds",
+            "description": "Transfer money to an account",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "amount": {"type": "number"},
+                    "to": {"type": "string"},
+                },
+            },
+        },
+    },
+])
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    tools=tools,
+    messages=[{"role": "user", "content": "Transfer $500 to Alice"}],
+)
+```
 
 ## Next steps
 
+- [How Validation Works](/docs/concepts/how-it-works) — understand the three validation paths
+- [Constraints Reference](/docs/concepts/constraints) — every constraint type explained
 - [TypeScript SDK](/docs/sdk/typescript) — full API reference
 - [Python SDK](/docs/sdk/python) — full API reference
-- [YAML Rule Format](/docs/rules/yaml-format) — complete rule syntax
-- [Validation Modes](/docs/rules/validation-modes) — deep dive into each mode
+- [POST /v1/tools/validate](/docs/api-reference/validate) — validation API reference

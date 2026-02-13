@@ -34,13 +34,26 @@ veto/
     └── default.yaml    # Default rule template
 ```
 
-If the `veto/` directory already exists, the command will not overwrite existing files.
+The generated `veto.config.yaml` defaults to cloud mode:
+
+```yaml
+version: "1.0"
+mode: "strict"
+
+validation:
+  mode: "cloud"
+
+cloud:
+  apiKey: "veto_your_key_here"
+```
+
+If the `veto/` directory already exists, the command does not overwrite existing files.
 
 ### `veto version`
 
-Prints the current Veto SDK version.
+Prints the current SDK version.
 
 ```bash
 npx veto version
-# veto-sdk@1.2.0
+# veto-sdk@1.4.0
 ```

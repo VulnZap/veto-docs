@@ -1,0 +1,128 @@
+---
+title: Constraints Reference
+description: Every constraint type supported by Veto's deterministic validation — numbers, strings, arrays, and presence checks.
+---
+
+Constraints are the building blocks of deterministic policies. Each constraint targets a single argument and checks one condition. A tool call is denied if any constraint fails.
+
+Constraints are configured per-tool in the [Veto dashboard](https://runveto.com) or via the policy API. They apply to both client-side and server-side deterministic validation.
+
+## Number constraints
+
+| Constraint | Description | Example |
+|-----------|-------------|---------|
+| `minimum` | Value must be ≥ threshold | `minimum: 0` — no negative amounts |
+| `maximum` | Value must be ≤ threshold | `maximum: 10000` — cap at $10,000 |
+| `greaterThan` | Value must be > threshold | `greaterThan: 0` — must be positive |
+| `lessThan` | Value must be < threshold | `lessThan: 100` — below 100 |
+| `greaterThanOrEqual` | Alias for `minimum` | Same as `minimum` |
+| `lessThanOrEqual` | Alias for `maximum` | Same as `maximum` |
+
+NaN and Infinity values always fail number constraints.
+
+**Example policy:** Block transfers over $5,000
+
+```
+argument: amount
+maximum: 5000
+```
+
+If the agent calls `transfer_funds({ amount: 7500 })`, it's denied with:
+
+```json
+{
+  "decision": "deny",
+  "failedArgument": "amount",
+  "reason": "amount 7500 exceeds maximum of 5000"
+}
+```
+
+## String constraints
+
+| Constraint | Description | Example |
+|-----------|-------------|---------|
+| `enum` | Value must exactly match one of the allowed strings | `enum: ["USD", "EUR", "GBP"]` |
+| `regex` | Value must match the regular expression | `regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+$"` |
+| `minLength` | String must be at least N characters | `minLength: 1` — no empty strings |
+| `maxLength` | String must be at most N characters | `maxLength: 500` — limit message length |
+
+Regex patterns are capped at 256 characters and checked for ReDoS safety before execution.
+
+**Example policy:** Only allow sending to approved domains
+
+```
+argument: to
+regex: "^[^@]+@(company\\.com|partner\\.org)$"
+```
+
+**Example policy:** Restrict currency to known values
+
+```
+argument: currency
+enum: ["USD", "EUR", "GBP", "JPY"]
+```
+
+## Array constraints
+
+| Constraint | Description | Example |
+|-----------|-------------|---------|
+| `minItems` | Array must have at least N elements | `minItems: 1` — no empty lists |
+| `maxItems` | Array must have at most N elements | `maxItems: 10` — limit batch size |
+
+**Example policy:** Limit bulk operations to 50 items
+
+```
+argument: ids
+maxItems: 50
+```
+
+## Presence constraints
+
+| Constraint | Description | Example |
+|-----------|-------------|---------|
+| `required` | Argument must be present in the call | `required: true` — can't omit this field |
+| `notNull` | Argument cannot be null/None | `notNull: true` — must have a value |
+
+`required` checks that the key exists in the arguments object. `notNull` additionally checks that the value is not null.
+
+## Combining constraints
+
+Multiple constraints on the same argument are AND-ed together. A tool call is denied if any single constraint fails.
+
+**Example:** Amount must be between 1 and 10,000 and is required
+
+```
+argument: amount
+required: true
+minimum: 1
+maximum: 10000
+```
+
+**Example:** Email must be present and match a pattern
+
+```
+argument: email
+required: true
+regex: "^[^@]+@[^@]+\\.[^@]+$"
+maxLength: 254
+```
+
+## Disabling constraints
+
+Set `enabled: false` on any constraint to skip it without deleting the configuration. Useful for temporarily relaxing a policy.
+
+## Python naming
+
+The Python SDK uses snake_case equivalents:
+
+| TypeScript | Python |
+|-----------|--------|
+| `notNull` | `not_null` |
+| `greaterThan` | `greater_than` |
+| `lessThan` | `less_than` |
+| `greaterThanOrEqual` | `greater_than_or_equal` |
+| `lessThanOrEqual` | `less_than_or_equal` |
+| `minLength` | `min_length` |
+| `maxLength` | `max_length` |
+| `minItems` | `min_items` |
+| `maxItems` | `max_items` |

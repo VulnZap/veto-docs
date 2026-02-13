@@ -1,0 +1,160 @@
+---
+title: How Validation Works
+description: Architecture of Veto's three validation paths — client-side deterministic, server-side deterministic, and server-side LLM.
+---
+
+When you wrap tools with the Veto SDK, every tool call goes through a validation pipeline before execution. The pipeline picks the fastest validation path that can handle your policy.
+
+## The validation pipeline
+
+```
+Agent calls wrapped tool
+         │
+         ▼
+  ┌─────────────────┐
+  │ Is the policy    │──── no ───▶ POST /v1/tools/validate
+  │ cached locally?  │            (server-side validation)
+  └────────┬────────┘
+           │ yes
+           ▼
+  ┌─────────────────┐
+  │ Policy mode is   │──── no ───▶ POST /v1/tools/validate
+  │ deterministic?   │            (server-side LLM)
+  └────────┬────────┘
+           │ yes
+           ▼
+  ┌─────────────────┐
+  │ Has session or   │──── yes ──▶ POST /v1/tools/validate
+  │ rate constraints? │            (server handles state)
+  └────────┬────────┘
+           │ no
+           ▼
+  Run constraints locally (~1-5ms)
+           │
+      ┌────┴────┐
+      │         │
+    allow     deny
+      │         │
+      ▼         ▼
+  Tool runs   ToolCallDeniedError
+      │         │
+      └────┬────┘
+           ▼
+  POST /v1/decisions (async, fire-and-forget)
+```
+
+## Path 1: Client-side deterministic
+
+The fastest path. The SDK evaluates constraints locally using a cached copy of the policy.
+
+**When it triggers:**
+- The tool's policy is cached (fetched on first call, background-refreshed every 60s)
+- The policy mode is `deterministic`
+- The policy has no session constraints or rate limits
+
+**What it checks:**
+- Number ranges (`minimum`, `maximum`, `greaterThan`, `lessThan`)
+- String validation (`enum`, `regex`, `minLength`, `maxLength`)
+- Array bounds (`minItems`, `maxItems`)
+- Required/null checks (`required`, `notNull`)
+
+**Latency:** ~1-5ms (no network call)
+
+**Decision logging:** The decision is sent to `POST /v1/decisions` asynchronously so the dashboard stays accurate. This never blocks tool execution.
+
+See [Constraints Reference](/docs/concepts/constraints) for every supported constraint type.
+
+## Path 2: Server-side deterministic
+
+The server evaluates the same constraint types as client-side, but also handles stateful checks that require server coordination.
+
+**When it triggers:**
+- Cache miss (first call for a tool, or policy expired)
+- Policy has session constraints (per-session call limits, argument tracking)
+- Policy has rate limits
+
+**What it checks:** Everything client-side checks, plus:
+- Session constraints (e.g. "max 3 calls to `delete_record` per session")
+- Rate limits (e.g. "max 10 calls per minute")
+- Cross-tool constraints (e.g. "if `read_file` was called, block `send_email`")
+
+**Latency:** ~30-50ms (one network round-trip)
+
+## Path 3: Server-side LLM
+
+An LLM evaluates the tool call against natural language policies and exception lists. Use this for checks that can't be expressed as static constraints.
+
+**When it triggers:**
+- Policy mode is `llm`
+
+**What it checks:**
+- Semantic evaluation against the policy description
+- Exception lists (e.g. "deny transfers to external accounts, except for verified vendors")
+- Complex multi-argument relationships
+- Context-dependent decisions
+
+**Latency:** ~500-2000ms (network + LLM inference)
+
+**Supported models:** Claude (Anthropic), GPT-4o-mini (OpenAI). Configured per-policy in the dashboard.
+
+## Policy cache
+
+The SDK caches policies locally using a stale-while-revalidate strategy:
+
+| Window | Duration | Behavior |
+|--------|----------|----------|
+| **Fresh** | 0 – 60s | Serve from cache immediately |
+| **Stale** | 60s – 5min | Serve from cache, refresh in background |
+| **Expired** | > 5min | Cache miss, fall through to server |
+
+When a policy is stale, the SDK returns the cached version instantly while fetching the latest version in the background. This means validation latency is consistently low even when policies change — the next call after the background refresh completes will use the updated policy.
+
+Policy changes made in the dashboard take effect within 60 seconds on all connected SDKs.
+
+## Decision flow for approvals
+
+When a policy is configured for human-in-the-loop review, the server returns `require_approval` instead of `allow` or `deny`:
+
+```
+POST /v1/tools/validate
+         │
+         ▼
+  decision: "require_approval"
+  approval_id: "apr_..."
+         │
+         ▼
+  SDK fires onApprovalRequired hook
+  (your app shows approval UI)
+         │
+         ▼
+  SDK polls GET /v1/approvals/:id
+  every 2 seconds (configurable)
+         │
+    ┌────┴─────────┐
+    │              │
+  approved       denied / expired / timeout
+    │              │
+  Tool runs     ToolCallDeniedError / ApprovalTimeoutError
+```
+
+Configure the approval hook when initializing the SDK:
+
+```typescript
+const veto = await Veto.init({
+  onApprovalRequired: (context, approvalId) => {
+    // Show approval UI, send notification, etc.
+  },
+});
+```
+
+## Offline validation modes
+
+Besides Veto Cloud, the SDK supports three offline modes that don't require the Veto server:
+
+| Mode | How it works | Config key |
+|------|-------------|------------|
+| **Custom** | Calls an LLM provider directly (OpenAI, Anthropic, Gemini) | `validation.mode: "custom"` |
+| **Kernel** | Uses a local Ollama model | `validation.mode: "kernel"` |
+| **API** | Sends to a self-hosted validation endpoint | `validation.mode: "api"` |
+
+See [Validation Modes](/docs/rules/validation-modes) for configuration details.
