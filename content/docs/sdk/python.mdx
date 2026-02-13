@@ -1,6 +1,6 @@
 ---
 title: Python SDK
-description: Full API reference for the Veto Python SDK (v0.3.0).
+description: Full API reference for the Veto Python SDK (v0.4.0).
 ---
 
 ## Installation
@@ -161,6 +161,40 @@ veto.clear_approval_preferences("read_file")
 veto.clear_approval_preferences()
 ```
 
+## Client-side deterministic validation
+
+The Python SDK evaluates deterministic constraints locally when a cached policy is available, identical to the TypeScript SDK. No network round-trip needed for simple checks like number ranges, string enums, or regex patterns.
+
+This is automatic in cloud mode. When the SDK has a cached policy for a tool and that policy uses `deterministic` mode without session constraints or rate limits, validation runs locally. Decisions are logged back to the server asynchronously.
+
+### Supported constraint types
+
+| Constraint | Applies to | Description |
+|-----------|-----------|-------------|
+| `required` | all | Argument must be present |
+| `not_null` | all | Argument cannot be None |
+| `minimum` | numbers | Lower bound (inclusive) |
+| `maximum` | numbers | Upper bound (inclusive) |
+| `greater_than` | numbers | Lower bound (exclusive) |
+| `less_than` | numbers | Lower bound (exclusive) |
+| `min_length` | strings | Minimum string length |
+| `max_length` | strings | Maximum string length |
+| `enum` | strings | Allowed exact values |
+| `regex` | strings | Pattern match (max 256 chars) |
+| `min_items` | arrays | Minimum list length |
+| `max_items` | arrays | Maximum list length |
+
+### Policy cache
+
+Policies are cached with stale-while-revalidate:
+
+| Window | Default | Behavior |
+|--------|---------|----------|
+| Fresh | 60s | Returns cached policy immediately |
+| Max age | 5min | Returns stale policy while refreshing in background |
+
+Background refreshes use `asyncio.create_task()` to avoid blocking the current validation. The cache requires an active event loop.
+
 ## `VetoCloudClient`
 
 Standalone client for direct cloud API interaction:
@@ -198,6 +232,31 @@ approval = await client.poll_approval("apr_abc123", ApprovalPollOptions(
     timeout=300.0,      # seconds
 ))
 # ApprovalData(id=..., status="approved"|"denied"|"expired", resolved_by=...)
+```
+
+### `await client.fetch_policy(tool_name)`
+
+Fetch a tool's policy from the server. Used by `PolicyCache` for background refreshes.
+
+```python
+policy = await client.fetch_policy("send_email")
+# dict with toolName, mode, constraints, etc.
+# Returns None on error
+```
+
+### `client.log_decision(request)`
+
+Log a client-side validation decision. Fire-and-forget — errors are silently swallowed.
+
+```python
+client.log_decision({
+    "tool_name": "send_email",
+    "arguments": {"to": "user@example.com"},
+    "decision": "allow",
+    "mode": "deterministic",
+    "latency_ms": 2,
+    "source": "client",
+})
 ```
 
 ### `await client.register_tools(tools)`

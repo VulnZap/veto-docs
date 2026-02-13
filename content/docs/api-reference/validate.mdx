@@ -3,7 +3,9 @@ title: POST /v1/validate
 description: Core validation endpoint — validates a tool call against policies.
 ---
 
-The validation endpoint is the hot path. Every tool call intercepted by the SDK hits this endpoint when running in cloud mode.
+The validation endpoint is the primary API for tool call validation. In cloud mode, the SDK calls this endpoint for every tool call that can't be resolved locally.
+
+As of SDK v1.4.0, deterministic policies are cached client-side. When the SDK has a fresh cached policy, validation runs locally (~1-5ms) and this endpoint is not called. Decisions from local validation are logged asynchronously via [POST /v1/decisions](/docs/api-reference/decisions).
 
 ## Request
 

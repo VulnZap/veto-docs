@@ -1,0 +1,115 @@
+---
+title: POST /v1/decisions
+description: Log a client-side validation decision — keeps the dashboard audit trail complete.
+---
+
+When the SDK validates a tool call locally (client-side deterministic), it logs the decision back to the server so the dashboard and audit trail stay accurate.
+
+This endpoint is called automatically by the SDK. You do not need to call it directly.
+
+## Request
+
+```
+POST /v1/decisions
+```
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Veto-API-Key` | Yes | API key scoped to a project |
+| `Content-Type` | Yes | `application/json` |
+
+### Body
+
+```json
+{
+  "tool_name": "transfer_funds",
+  "arguments": { "amount": 500, "to": "vendor-123" },
+  "decision": "allow",
+  "reason": "All constraints passed",
+  "mode": "deterministic",
+  "latency_ms": 2,
+  "source": "client",
+  "context": {
+    "session_id": "sess_abc123",
+    "agent_id": "agent_1"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `tool_name` | `string` | Yes | Name of the tool that was validated |
+| `arguments` | `object` | Yes | Arguments that were validated |
+| `decision` | `"allow" \| "deny"` | Yes | Validation result |
+| `reason` | `string` | No | Explanation of the decision |
+| `mode` | `"deterministic"` | Yes | Validation mode used |
+| `latency_ms` | `number` | Yes | Client-side validation time in milliseconds |
+| `source` | `"client"` | Yes | Must be `"client"` |
+| `context` | `object` | No | Additional metadata (session_id, agent_id, etc.) |
+
+## Response
+
+### Success
+
+```json
+{
+  "success": true,
+  "id": "d7f2a1b3-4c5e-6f78-9a0b-1c2d3e4f5a6b"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | `boolean` | Whether the decision was logged |
+| `id` | `string` | UUID of the created decision record |
+
+### Error: missing project
+
+```json
+{
+  "error": {
+    "code": "missing_project",
+    "message": "API key must be scoped to a project"
+  }
+}
+```
+
+Returned when the API key is org-scoped but not project-scoped. Decision logging requires a project context.
+
+## Rate limiting
+
+120 requests per 60 seconds per API key.
+
+## SDK behavior
+
+The SDK calls this endpoint automatically after every client-side deterministic validation. The call is fire-and-forget — errors are silently swallowed so they never block tool execution.
+
+Both TypeScript and Python SDKs use the same behavior:
+
+```typescript
+// TypeScript — called internally by tryLocalDeterministic()
+client.logDecision({
+  tool_name: 'send_email',
+  arguments: { to: 'user@example.com' },
+  decision: 'allow',
+  mode: 'deterministic',
+  latency_ms: 2,
+  source: 'client',
+});
+```
+
+```python
+# Python — called internally by try_local_deterministic()
+client.log_decision({
+    "tool_name": "send_email",
+    "arguments": {"to": "user@example.com"},
+    "decision": "allow",
+    "mode": "deterministic",
+    "latency_ms": 2,
+    "source": "client",
+})
+```
+
+Decisions logged via this endpoint appear in the dashboard alongside server-side decisions. They are marked with `source: "client"` in the context field.
