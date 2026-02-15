@@ -56,7 +56,7 @@ const veto = await Veto.init();
 const wrappedTools = veto.wrap(myTools);
 
 try {
-  await wrappedTool.invoke({ amount: 100 });
+  await wrappedTools[0].invoke({ amount: 100 });
 } catch (error) {
   if (error instanceof BudgetExceededError) {
     console.log(error.spent);     // Total spent so far
