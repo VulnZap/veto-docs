@@ -1,0 +1,96 @@
+---
+title: Budget Constraints
+description: Per-session cost circuit breaker that limits how much an agent can spend.
+---
+
+Budget constraints let you set a maximum cost per agent session. When the budget is exhausted, the SDK throws `BudgetExceededError` before the tool call executes.
+
+## Configuration
+
+Add `budget` and `costs` sections to `veto.config.yaml`:
+
+```yaml
+version: "1.0"
+mode: "strict"
+
+budget:
+  max: 50
+  currency: USD
+  window: session
+
+costs:
+  send_email: 0
+  api_call: 0.01
+  web_search: 0.05
+  purchase: args.amount
+```
+
+### Budget fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `max` | `number` | — | Maximum budget for the session |
+| `currency` | `string` | `"USD"` | Currency label (display only) |
+| `window` | `"session"` | `"session"` | Budget resets per session |
+
+### Cost definitions
+
+Each entry in `costs` maps a tool name to its cost:
+
+| Value | Meaning |
+|-------|---------|
+| `0` | Free — no budget impact |
+| `0.01` | Fixed cost per call |
+| `args.amount` | Dynamic — reads the cost from a tool argument |
+
+Dynamic costs use dot-notation to resolve values from the tool call arguments. For example, `args.amount` reads the `amount` field from the arguments object. If the resolved value is not a non-negative finite number, the cost defaults to 0.
+
+## Usage
+
+Budget tracking is automatic when `budget` is configured:
+
+```typescript
+import { Veto, BudgetExceededError } from 'veto-sdk';
+
+const veto = await Veto.init();
+const wrappedTools = veto.wrap(myTools);
+
+try {
+  await wrappedTool.invoke({ amount: 100 });
+} catch (error) {
+  if (error instanceof BudgetExceededError) {
+    console.log(error.spent);     // Total spent so far
+    console.log(error.limit);     // Budget max
+    console.log(error.remaining); // How much is left
+    console.log(error.toolName);  // Which tool was blocked
+    console.log(error.toolCost);  // What the tool would have cost
+  }
+}
+```
+
+## Budget status
+
+Check the current budget at any time:
+
+```typescript
+const status = veto.getBudgetStatus();
+// { spent: 12.50, limit: 50, remaining: 37.50, currency: "USD" }
+```
+
+## How it works
+
+1. Before each tool call, the SDK resolves the tool's cost from the `costs` map
+2. If `spent + cost > max`, the SDK throws `BudgetExceededError` before validation
+3. After a successful tool call, the cost is recorded against the session total
+4. Tools not listed in `costs` have zero cost and are always allowed (budget-wise)
+
+Budget checks run before policy validation. A tool call can be blocked by budget constraints even if it would pass all policy checks.
+
+## Exports
+
+| Import | What |
+|--------|------|
+| `BudgetExceededError` | Error thrown when budget is exhausted |
+| `BudgetStatus` | Type for `{ spent, limit, remaining, currency }` |
+
+Both are available from the main `veto-sdk` entry point.

@@ -7,23 +7,23 @@ Veto sits between an AI agent and its tools. Every tool call is intercepted, val
 
 ```
 Agent calls tool ──▶ Veto validates ──▶ Tool executes
-                         │
-                    ┌────┴────┐
-                    │         │
-                  allow     deny / require approval
+                          │
+                     ┌────┴────┐
+                     │         │
+                   allow     deny / require approval
 ```
 
-## Three validation paths
+## Three runtime modes
 
-When using Veto Cloud, tool calls are validated through one of three paths depending on how you configure each tool's policy:
+Veto auto-detects which mode to use based on how you initialize it:
 
-| Path | Where | Latency | Use case |
-|------|-------|---------|----------|
-| **Client-side deterministic** | SDK | ~1-5ms | Number ranges, string enums, regex, required fields |
-| **Server-side deterministic** | Veto Cloud | ~30-50ms | Same constraints + session limits + rate limits |
-| **Server-side LLM** | Veto Cloud | ~500-2000ms | Semantic checks, exception lists, natural language policies |
+| Mode | Activated by | What happens |
+|------|-------------|-------------|
+| **Local** (default) | Nothing — just `Veto.init()` | Rules from `./veto/rules/*.yaml` evaluated in-process. Zero network calls. |
+| **Cloud** | `apiKey` or `VETO_API_KEY` | Policies from the [dashboard](https://runveto.com). Deterministic cached locally, LLM via server. |
+| **Self-hosted** | `endpoint` URL | Same as cloud, on your infrastructure. |
 
-The SDK automatically picks the fastest path. Deterministic policies are cached locally and validated without a network call. LLM policies and policies with session/rate constraints always go through the server.
+See [SDK Modes](/docs/concepts/modes) for full details.
 
 ## Get started in 3 steps
 
@@ -34,7 +34,12 @@ npm install veto-sdk    # TypeScript
 pip install veto        # Python
 ```
 
-**2. Get an API key** from the [Veto dashboard](https://runveto.com) and configure policies for your tools.
+**2. Initialize and write a rule**
+
+```bash
+npx veto init
+# Edit veto/rules/default.yaml with your constraints
+```
 
 **3. Wrap your tools**
 
@@ -44,16 +49,17 @@ import { Veto } from 'veto-sdk';
 const veto = await Veto.init();
 const wrappedTools = veto.wrap(myTools);
 
-// Pass wrapped tools to your agent — the interface is identical
 const agent = createAgent({ tools: wrappedTools });
 ```
 
-Every tool call is now validated against your policies. The agent code doesn't change.
+Every tool call is now validated against your rules. The agent code doesn't change.
 
 ## Features
 
-- **Zero-config fast path** — deterministic constraints run locally in the SDK with no network call
-- **Provider agnostic** — OpenAI, Anthropic, Google, LangChain, Vercel AI SDK, browser-use
+- **Local-first** — works out of the box with YAML rules, no API key or account needed
+- **Provider agnostic** — OpenAI, Anthropic, Google, LangChain, Vercel AI SDK, MCP, browser-use
+- **Budget constraints** — per-session cost circuit breaker for tool calls
+- **CLI tooling** — `veto compile` (NL → rules), `veto learn` (observe → generate), `veto test` (gap analysis)
 - **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
 - **LLM validation** — natural language policies for cases static rules can't cover
 - **Session-aware** — track per-session call counts, argument history, and cross-tool constraints
@@ -62,8 +68,10 @@ Every tool call is now validated against your policies. The agent code doesn't c
 
 ## Next steps
 
-- [Quick Start](/docs/getting-started/quick-start) — end-to-end setup in 5 minutes
+- [Quick Start](/docs/getting-started/quick-start) — end-to-end setup in 60 seconds
+- [SDK Modes](/docs/concepts/modes) — local, cloud, and self-hosted explained
 - [How Validation Works](/docs/concepts/how-it-works) — architecture deep dive
 - [Constraints Reference](/docs/concepts/constraints) — every constraint type explained
+- [CLI Reference](/docs/sdk/cli) — compile, learn, test commands
 - [TypeScript SDK](/docs/sdk/typescript) — full API reference
 - [Python SDK](/docs/sdk/python) — full API reference

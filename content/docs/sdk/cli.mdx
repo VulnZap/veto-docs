@@ -23,6 +23,7 @@ Scaffolds a new Veto configuration in the current directory.
 
 ```bash
 npx veto init
+npx veto init --force    # Overwrite existing files
 ```
 
 Creates:
@@ -34,20 +35,117 @@ veto/
     └── default.yaml    # Default rule template
 ```
 
-The generated `veto.config.yaml` defaults to cloud mode:
+The generated `veto.config.yaml` defaults to local mode:
 
 ```yaml
 version: "1.0"
 mode: "strict"
-
-validation:
-  mode: "cloud"
-
-cloud:
-  apiKey: "veto_your_key_here"
 ```
 
-If the `veto/` directory already exists, the command does not overwrite existing files.
+No API key or account needed to start. Add `VETO_API_KEY` to switch to cloud mode later.
+
+If the `veto/` directory already exists, the command does not overwrite existing files unless `--force` is set.
+
+### `veto compile`
+
+Compiles natural language policy descriptions into deterministic YAML rules using an LLM at build time.
+
+```bash
+# From inline text
+veto compile --input "Block emails to domains outside company.com" --output ./veto/rules/email.yaml
+
+# From a text file
+veto compile --file policies.txt --output ./veto/rules/
+
+# With a specific provider
+veto compile --input "Cap transfers at $5000" --output ./veto/rules/limits.yaml --provider anthropic
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--input <text>` | One of `--input` or `--file` | — | Policy description as inline text |
+| `--file <path>` | One of `--input` or `--file` | — | Path to a text file containing policy descriptions |
+| `--output <path>` | Yes | — | Output file (`.yaml`) or directory for generated rules |
+| `--provider <name>` | No | `openai` | LLM provider: `openai`, `anthropic`, `gemini`, `openrouter` |
+| `--model <name>` | No | Provider default | Model identifier (e.g. `gpt-4o`, `claude-sonnet-4-5-20250929`) |
+| `--quiet` | No | `false` | Suppress output |
+
+The compile command uses the LLM only at build time. The generated YAML rules run locally with zero network calls at runtime.
+
+Requires the corresponding provider API key as an environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`).
+
+### `veto learn`
+
+Observe tool calls and auto-generate tight allowlist policies from real usage patterns.
+
+```bash
+# Stop after 10 tool calls
+veto learn --runs 10
+
+# Stop after 30 minutes
+veto learn --duration 30m
+
+# Custom output path
+veto learn --output ./veto/rules/learned.yaml
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--runs <n>` | One of `--runs` or `--duration` | — | Stop after N tool calls |
+| `--duration <time>` | One of `--runs` or `--duration` | — | Stop after duration (e.g. `30s`, `10m`, `1h`) |
+| `--output <path>` | No | `./veto/rules/learned.yaml` | Output YAML file path |
+| `--margin <n>` | No | `0.1` | Numeric range margin as decimal (10% slack around observed values) |
+| `--quiet` | No | `false` | Suppress output |
+
+The learn command reads tool calls from stdin as JSON objects, one per line:
+
+```json
+{"tool": "send_email", "args": {"to": "alice@company.com", "subject": "Hello"}}
+{"tool": "transfer_funds", "args": {"amount": 500, "currency": "USD"}}
+```
+
+After observing enough calls, it generates deterministic constraints:
+- Number ranges with configurable margin
+- String enum allowlists (when fewer than 10 unique values observed)
+- Required field detection
+- Array length bounds
+
+### `veto test`
+
+Adversarial policy gap finder. Analyzes your YAML rules for coverage gaps, regex bypasses, type coercion issues, and uncovered tools.
+
+```bash
+# Analyze default policy directory
+veto test
+
+# Analyze specific directory
+veto test --policy ./veto/rules
+
+# Save JSON report
+veto test --output report.json
+
+# JSON output format
+veto test --format json
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--policy <path>` | No | `./veto/rules/` | Policy directory to analyze |
+| `--output <file>` | No | — | Write JSON report to file |
+| `--format <fmt>` | No | `text` | Output format: `text` or `json` |
+| `--quiet` | No | `false` | Suppress output |
+
+**Exit codes:**
+- `0` — No critical gaps found
+- `1` — Critical gaps detected (CI-friendly)
+
+**Gap severities:**
+
+| Severity | Meaning |
+|----------|---------|
+| `critical` | Security risk — tools or arguments with no constraints |
+| `warning` | Potential bypass — weak regex, type coercion, missing bounds |
+| `info` | Suggestion — coverage improvements, best practices |
 
 ### `veto version`
 
@@ -55,5 +153,13 @@ Prints the current SDK version.
 
 ```bash
 npx veto version
-# veto-sdk@1.4.0
+# veto v0.1.0
+```
+
+### `veto help`
+
+Shows all commands and flags.
+
+```bash
+npx veto help
 ```

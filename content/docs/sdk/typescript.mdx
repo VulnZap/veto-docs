@@ -1,6 +1,6 @@
 ---
 title: TypeScript SDK
-description: Full API reference for the Veto TypeScript SDK (v1.4.0).
+description: Full API reference for the Veto TypeScript SDK (v1.5.0).
 ---
 
 ## Installation
@@ -16,7 +16,14 @@ Initialize Veto. Loads configuration from `./veto` by default.
 ```typescript
 import { Veto } from 'veto-sdk';
 
+// Local mode (default — no API key needed)
 const veto = await Veto.init();
+
+// Cloud mode
+const veto = await Veto.init({ apiKey: "veto_..." });
+
+// Self-hosted mode
+const veto = await Veto.init({ endpoint: "https://veto.internal.corp.com" });
 ```
 
 ### Options
@@ -25,6 +32,8 @@ const veto = await Veto.init();
 |--------|------|---------|-------------|
 | `configDir` | `string` | `"./veto"` | Path to config directory |
 | `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
+| `apiKey` | `string` | — | API key — triggers cloud mode |
+| `endpoint` | `string` | — | Server URL — triggers self-hosted mode |
 | `logLevel` | `string` | `"info"` | Log level |
 | `sessionId` | `string` | — | Session ID for tracking |
 | `agentId` | `string` | — | Agent ID for tracking |
@@ -32,16 +41,22 @@ const veto = await Veto.init();
 | `cloudClient` | `VetoCloudClient` | — | Injected cloud client |
 | `onApprovalRequired` | `(context, approvalId) => void` | — | Hook fired when a tool call needs human approval |
 
+Mode auto-detection: `endpoint` > `apiKey` > explicit config > `VETO_API_KEY` env > local fallback. See [SDK Modes](/docs/concepts/modes) for full precedence rules.
+
 ## `veto.wrap<T>(tools: T[]): T[]`
 
 Wraps an array of tools with validation. The returned tools have identical types — fully compatible with your AI framework.
 
 ```typescript
-const wrappedForLangChain = veto.wrap(langChainTools);
+const wrappedForOpenAI = veto.wrap(openAITools);
+const wrappedForAnthropic = veto.wrap(anthropicTools);
 const wrappedForVercel = veto.wrap(vercelTools);
+const wrappedForMCP = veto.wrap(mcpTools);
 ```
 
-Works with LangChain, Vercel AI SDK, OpenAI function calling, Anthropic tool use, and custom tool objects.
+Works with OpenAI function calling, Anthropic tool use, Vercel AI SDK, LangChain, MCP tools, and custom tool objects.
+
+MCP tool definitions (using `inputSchema` instead of `parameters`) are auto-detected and converted transparently. See [MCP Integration](/docs/integrations/mcp).
 
 ## `veto.wrapTool<T>(tool: T): T`
 
@@ -85,6 +100,24 @@ try {
 }
 ```
 
+When a budget limit is exceeded, Veto throws a `BudgetExceededError`:
+
+```typescript
+import { BudgetExceededError } from 'veto-sdk';
+
+try {
+  await wrappedTool.invoke(args);
+} catch (error) {
+  if (error instanceof BudgetExceededError) {
+    console.log(error.spent);     // 48.50
+    console.log(error.limit);     // 50
+    console.log(error.remaining); // 1.50
+    console.log(error.toolName);  // "purchase"
+    console.log(error.toolCost);  // 25
+  }
+}
+```
+
 When an approval poll times out, Veto throws an `ApprovalTimeoutError`:
 
 ```typescript
@@ -102,7 +135,7 @@ try {
 
 ## Cloud validation and approvals
 
-When using `cloud` validation mode, the SDK routes tool calls through the Veto Cloud API. The server can return three decisions: `allow`, `deny`, or `require_approval`.
+When using cloud or self-hosted mode, the SDK routes tool calls through the Veto server. The server can return three decisions: `allow`, `deny`, or `require_approval`.
 
 When a tool call requires approval, the SDK:
 
@@ -112,8 +145,8 @@ When a tool call requires approval, the SDK:
 
 ```typescript
 const veto = await Veto.init({
+  apiKey: "veto_...",
   onApprovalRequired: (context, approvalId) => {
-    // Show approval UI to the user
     console.log(`Tool "${context.toolName}" needs approval: ${approvalId}`);
   },
 });
@@ -141,27 +174,18 @@ approval:
 Cache per-tool preferences to auto-resolve approvals without server polling:
 
 ```typescript
-// Auto-approve all future calls to "read_file"
 veto.setApprovalPreference('read_file', 'approve_all');
-
-// Auto-deny all future calls to "delete_database"
 veto.setApprovalPreference('delete_database', 'deny_all');
-
-// Check current preference
 veto.getApprovalPreference('read_file'); // "approve_all"
-
-// Clear preference for one tool
 veto.clearApprovalPreferences('read_file');
-
-// Clear all preferences
-veto.clearApprovalPreferences();
+veto.clearApprovalPreferences(); // Clear all
 ```
 
 ## Client-side deterministic validation
 
-When using cloud mode, the SDK can evaluate deterministic constraints locally — no network round-trip needed. Policies are fetched from the cloud and cached with a stale-while-revalidate strategy.
+When using cloud mode, the SDK evaluates deterministic constraints locally — no network round-trip needed. Policies are fetched from the cloud and cached with a stale-while-revalidate strategy.
 
-This is automatic. When the SDK has a cached policy for a tool and that policy uses `deterministic` mode without session constraints or rate limits, validation runs entirely in the SDK. The decision is logged back to the server asynchronously so the dashboard stays accurate.
+This is automatic. When the SDK has a cached policy for a tool and that policy uses `deterministic` mode without session constraints or rate limits, validation runs entirely in the SDK.
 
 ```
 Agent calls tool
@@ -207,12 +231,7 @@ Policies are cached with two time windows:
 | Fresh | 60s | Returns cached policy immediately |
 | Max age | 5min | Returns stale policy while refreshing in background |
 
-After max age, the cache entry expires and the next validation falls through to the server. Background refreshes are deferred to avoid blocking the current validation.
-
-```typescript
-// PolicyCache is initialized automatically in cloud mode.
-// No configuration needed — it uses sensible defaults.
-```
+After max age, the cache entry expires and the next validation falls through to the server.
 
 ## `VetoCloudClient`
 
@@ -251,25 +270,24 @@ Poll an approval record until resolved or timed out.
 
 ```typescript
 const approval = await client.pollApproval('apr_abc123', {
-  pollInterval: 2000,  // ms
-  timeout: 300000,     // ms
+  pollInterval: 2000,
+  timeout: 300000,
 });
 // { id, toolName, status: "approved" | "denied" | "expired", resolvedBy? }
 ```
 
 ### `client.fetchPolicy(toolName)`
 
-Fetch a tool's policy from the server. Used by `PolicyCache` for background refreshes.
+Fetch a tool's policy from the server.
 
 ```typescript
 const policy = await client.fetchPolicy('send_email');
 // { toolName, mode, constraints, sessionConstraints?, rateLimits?, version }
-// Returns null on error (404, network failure, etc.)
 ```
 
 ### `client.logDecision(request)`
 
-Log a client-side validation decision to the server. Fire-and-forget — errors are silently swallowed.
+Log a client-side validation decision to the server. Fire-and-forget.
 
 ```typescript
 client.logDecision({
@@ -305,21 +323,27 @@ The SDK includes adapters that convert tool definitions between formats:
 ```typescript
 import { adapters } from 'veto-sdk/providers';
 
-// Convert OpenAI tools to Anthropic format
 const anthropicTools = adapters.toAnthropic(openAITools);
-
-// Convert Anthropic tools to OpenAI format
 const openAITools = adapters.toOpenAI(anthropicTools);
+```
+
+MCP tools are converted automatically by `veto.wrap()`. For manual use:
+
+```typescript
+import { fromMCP, isMCPTool } from 'veto-sdk/providers';
+
+if (isMCPTool(tool)) {
+  const normalized = fromMCP(tool);
+}
 ```
 
 ## Exports
 
-The SDK publishes multiple entry points:
-
 | Import | What it provides |
 |--------|-----------------|
-| `veto-sdk` | Core `Veto` class, types, errors |
-| `veto-sdk/providers` | Provider adapters (OpenAI, Anthropic, Google) |
+| `veto-sdk` | Core `Veto` class, `ToolCallDeniedError`, `BudgetExceededError`, `BudgetStatus` |
+| `veto-sdk/providers` | Provider adapters, `fromMCP`, `isMCPTool`, `MCPTool`, `MCPToolResult` |
+| `veto-sdk/cloud` | `VetoCloudClient`, `ApprovalTimeoutError` |
 | `veto-sdk/rules` | Rule parsing and matching utilities |
 | `veto-sdk/kernel` | Local model evaluation via Ollama |
 | `veto-sdk/custom` | Direct LLM provider integration |
