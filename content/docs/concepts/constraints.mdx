@@ -157,7 +157,7 @@ rules:
       - send_message
     conditions:
       - field: arguments.body
-        operator: not_contains
+        operator: contains
         value: "password"
 ```
 

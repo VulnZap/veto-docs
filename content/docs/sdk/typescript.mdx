@@ -17,13 +17,13 @@ Initialize Veto. Loads configuration from `./veto` by default.
 import { Veto } from 'veto-sdk';
 
 // Local mode (default — no API key needed)
-const veto = await Veto.init();
+const vetoLocal = await Veto.init();
 
 // Cloud mode
-const veto = await Veto.init({ apiKey: "veto_..." });
+const vetoCloud = await Veto.init({ apiKey: "veto_..." });
 
 // Self-hosted mode
-const veto = await Veto.init({ endpoint: "https://veto.internal.corp.com" });
+const vetoSelfHosted = await Veto.init({ endpoint: "https://veto.internal.corp.com" });
 ```
 
 ### Options
