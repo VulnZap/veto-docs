@@ -1,9 +1,9 @@
 ---
 title: Quick Start
-description: Get Veto running in 5 minutes with Veto Cloud.
+description: Get Veto running in 60 seconds — no API key, no account, no network.
 ---
 
-This guide uses Veto Cloud — the fastest way to get started. You'll need an API key from the [Veto dashboard](https://runveto.com).
+Veto works locally out of the box. No API key, no account, no network calls. Install, init, wrap — done.
 
 ## 1. Install the SDK
 
@@ -32,30 +32,25 @@ veto/
     └── default.yaml
 ```
 
-Edit `veto/veto.config.yaml`:
+The generated config defaults to **local mode** — all validation runs in-process using your YAML rules.
+
+## 3. Write a rule
+
+Edit `veto/rules/default.yaml`:
 
 ```yaml
-version: "1.0"
-mode: "strict"
-
-validation:
-  mode: "cloud"
-
-cloud:
-  apiKey: "veto_your_key_here"
+rules:
+  - id: limit-transfers
+    name: Block large transfers
+    action: block
+    severity: critical
+    tools:
+      - transfer_funds
+    conditions:
+      - field: arguments.amount
+        operator: greater_than
+        value: 10000
 ```
-
-Or set the `VETO_API_KEY` environment variable instead of putting the key in the config file.
-
-## 3. Configure policies in the dashboard
-
-Go to the [Veto dashboard](https://runveto.com) and create policies for your tools. Each policy defines what constraints to check for a specific tool.
-
-**Example:** For a `transfer_funds` tool, you might set:
-- `amount`: maximum 10000, minimum 0, required
-- `currency`: enum ["USD", "EUR", "GBP"]
-
-The SDK fetches these policies automatically and caches them locally for fast validation.
 
 ## 4. Wrap your tools
 
@@ -68,17 +63,45 @@ const wrappedTools = veto.wrap(myTools);
 const agent = createAgent({ tools: wrappedTools });
 ```
 
-That's it. Every tool call now goes through Veto.
+That's it. Every tool call now goes through Veto. If the agent tries `transfer_funds({ amount: 50000 })`, it throws `ToolCallDeniedError`.
 
-## What happens next
+## What happens in local mode
 
 When the agent calls a tool:
 
-1. **Deterministic policies** are checked locally in ~1-5ms (cached from the cloud)
-2. **LLM policies** are sent to the cloud for semantic validation in ~500-2000ms
-3. **Approval policies** pause execution until a human approves in the dashboard
-4. **Allowed** calls execute normally. **Denied** calls throw `ToolCallDeniedError`.
-5. Every decision is logged to the dashboard for audit and monitoring.
+1. The SDK loads rules from `./veto/rules/*.yaml`
+2. Conditions are evaluated locally in ~1-5ms (no network call)
+3. **Allowed** calls execute normally. **Denied** calls throw `ToolCallDeniedError`.
+
+All validation happens in-process. Nothing leaves your machine.
+
+## Scale up: Cloud mode
+
+When you need a dashboard, approval workflows, or LLM-based policies, add an API key:
+
+```typescript
+const veto = await Veto.init({ apiKey: "veto_..." });
+```
+
+Or set the `VETO_API_KEY` environment variable. The SDK auto-detects cloud mode.
+
+With cloud mode:
+- **Deterministic policies** are cached locally and checked in ~1-5ms
+- **LLM policies** are sent to the cloud for semantic validation in ~500-2000ms
+- **Approval policies** pause execution until a human approves in the [dashboard](https://runveto.com)
+- Every decision is logged for audit and monitoring
+
+## Scale up: Self-hosted mode
+
+Run your own Veto server and point the SDK at it:
+
+```typescript
+const veto = await Veto.init({
+  endpoint: "https://veto.internal.corp.com",
+});
+```
+
+Same features as cloud, but on your infrastructure. See [SDK Modes](/docs/concepts/modes) for details.
 
 ## Framework examples
 
@@ -177,6 +200,27 @@ const result = await generateText({
 });
 ```
 
+### MCP tools
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+
+// MCP tools use inputSchema instead of parameters — Veto auto-detects
+const tools = veto.wrap([
+  {
+    name: 'read_file',
+    description: 'Read a file',
+    inputSchema: {
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+    },
+  },
+]);
+```
+
 ### Python (OpenAI)
 
 ```python
@@ -212,8 +256,9 @@ response = client.chat.completions.create(
 
 ## Next steps
 
-- [How Validation Works](/docs/concepts/how-it-works) — understand the three validation paths
+- [SDK Modes](/docs/concepts/modes) — local, cloud, and self-hosted explained
+- [How Validation Works](/docs/concepts/how-it-works) — architecture deep dive
 - [Constraints Reference](/docs/concepts/constraints) — every constraint type explained
+- [CLI Reference](/docs/sdk/cli) — compile, learn, test commands
 - [TypeScript SDK](/docs/sdk/typescript) — full API reference
 - [Python SDK](/docs/sdk/python) — full API reference
-- [POST /v1/tools/validate](/docs/api-reference/validate) — validation API reference

@@ -1,0 +1,159 @@
+---
+title: SDK Modes
+description: Three runtime modes — local, cloud, and self-hosted — with automatic detection at init.
+---
+
+The SDK auto-detects which mode to use based on what you pass to `Veto.init()`. No explicit mode configuration is needed.
+
+## Mode detection precedence
+
+The SDK checks these in order and uses the first match:
+
+| Priority | Condition | Mode |
+|----------|-----------|------|
+| 1 | `options.endpoint` is set | **Self-hosted** |
+| 2 | `options.apiKey` is set | **Cloud** |
+| 3 | `config.validation.mode` is set explicitly | Uses that mode |
+| 4 | `VETO_API_KEY` env var is set | **Cloud** |
+| 5 | `config.cloud.baseUrl` is a non-default URL | **Self-hosted** |
+| 6 | Nothing | **Local** (default) |
+
+On startup, the SDK logs which mode was selected:
+
+```
+[VETO] INFO  Veto running in local mode
+```
+
+## Local mode (default)
+
+Zero network calls. Rules are loaded from `./veto/rules/*.yaml` and evaluated in-process.
+
+```typescript
+const veto = await Veto.init();
+```
+
+**What it does:**
+- Reads YAML rules from `./veto/rules/`
+- Evaluates all condition operators locally (expression-based and legacy field/operator)
+- Logs decisions to stdout
+- No API key, no account, no network traffic
+
+**Best for:** Development, CI pipelines, air-gapped environments, getting started.
+
+## Cloud mode
+
+Activated by providing an API key. Policies are managed in the [Veto dashboard](https://runveto.com) and cached locally with stale-while-revalidate.
+
+```typescript
+// Via options
+const veto = await Veto.init({ apiKey: "veto_..." });
+
+// Via environment variable
+// export VETO_API_KEY=veto_...
+const veto = await Veto.init();
+
+// Via config file
+// cloud:
+//   apiKey: "veto_..."
+const veto = await Veto.init();
+```
+
+**What it does:**
+- Fetches policies from the cloud and caches them locally
+- Deterministic policies run client-side (~1-5ms)
+- LLM policies route through the server (~500-2000ms)
+- Approval workflows pause until a human resolves
+- Decisions logged to the dashboard for audit
+
+**Best for:** Production teams needing visibility, approval workflows, and analytics.
+
+## Self-hosted mode
+
+Activated by providing an endpoint URL pointing to your own Veto server.
+
+```typescript
+// Your own Veto server
+const veto = await Veto.init({
+  endpoint: "https://veto.internal.corp.com",
+});
+
+// Self-hosted with API key authentication
+const veto = await Veto.init({
+  endpoint: "https://veto.internal.corp.com",
+  apiKey: "veto_...",
+});
+```
+
+**What it does:**
+- Same features as cloud mode but on your infrastructure
+- The `apiKey` authenticates against your self-hosted server
+- All data stays within your network
+
+**Best for:** Enterprises with data residency requirements, compliance-heavy environments.
+
+If both `endpoint` and `apiKey` are provided, the SDK logs a warning and uses self-hosted mode with the API key for authentication.
+
+## Init options reference
+
+```typescript
+interface VetoOptions {
+  configDir?: string;     // default: "./veto"
+  mode?: "strict" | "log";
+  apiKey?: string;        // triggers cloud mode
+  endpoint?: string;      // triggers self-hosted mode
+  logLevel?: string;
+  sessionId?: string;
+  agentId?: string;
+  validators?: Validator[];
+  cloudClient?: VetoCloudClient;
+  onApprovalRequired?: (context: ValidationContext, approvalId: string) => void;
+}
+```
+
+## Config file examples
+
+### Local (default)
+
+No `validation.mode` needed — this is the default:
+
+```yaml
+version: "1.0"
+mode: "strict"
+```
+
+### Cloud
+
+```yaml
+version: "1.0"
+mode: "strict"
+
+validation:
+  mode: "cloud"
+
+cloud:
+  apiKey: "veto_..."
+```
+
+### Self-hosted
+
+```yaml
+version: "1.0"
+mode: "strict"
+
+validation:
+  mode: "cloud"
+
+cloud:
+  baseUrl: "https://veto.internal.corp.com"
+```
+
+## Operating modes
+
+Orthogonal to the runtime mode, Veto has two operating modes that control what happens when a tool call is denied:
+
+| Mode | Behavior |
+|------|----------|
+| `strict` | Blocks denied calls — throws `ToolCallDeniedError` |
+| `log` | Logs denied calls but allows execution to continue |
+
+Use `log` mode during initial rollout to observe what would be blocked without affecting agent behavior.

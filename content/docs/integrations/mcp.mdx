@@ -1,0 +1,134 @@
+---
+title: MCP Integration
+description: Use Veto with Model Context Protocol (MCP) tool definitions.
+---
+
+Veto supports [Model Context Protocol (MCP)](https://modelcontextprotocol.io) tool definitions natively. The SDK auto-detects MCP format and converts it transparently.
+
+## Quick start
+
+Pass MCP tool definitions directly to `veto.wrap()`:
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+const wrappedTools = veto.wrap(mcpToolDefinitions);
+```
+
+No adapter code needed. The SDK detects MCP tools by checking for `inputSchema` (the MCP convention) instead of `parameters` (OpenAI convention) and converts automatically.
+
+## How MCP tools differ
+
+MCP tools use `inputSchema` instead of `parameters`:
+
+```typescript
+// MCP tool format
+const mcpTool = {
+  name: "read_file",
+  description: "Read a file from disk",
+  inputSchema: {
+    type: "object",
+    properties: {
+      path: { type: "string" },
+    },
+    required: ["path"],
+  },
+};
+
+// OpenAI tool format (what Veto normalizes to internally)
+const openAITool = {
+  type: "function",
+  function: {
+    name: "read_file",
+    description: "Read a file from disk",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+      },
+      required: ["path"],
+    },
+  },
+};
+```
+
+When you pass MCP tools to `veto.wrap()`, the SDK converts `inputSchema` to `parameters` internally. Policies and rules reference tool arguments the same way regardless of the source format.
+
+## Manual adapter
+
+For advanced use cases, you can use the adapter functions directly:
+
+```typescript
+import { fromMCP, isMCPTool } from 'veto-sdk/providers';
+
+// Check if a tool is MCP format
+if (isMCPTool(tool)) {
+  const normalized = fromMCP(tool);
+  // normalized has OpenAI-style `parameters` instead of `inputSchema`
+}
+```
+
+## Example: MCP server with Veto policies
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+// Your MCP server tools
+const mcpTools = [
+  {
+    name: "execute_command",
+    description: "Run a shell command",
+    inputSchema: {
+      type: "object",
+      properties: {
+        command: { type: "string" },
+        cwd: { type: "string" },
+      },
+      required: ["command"],
+    },
+  },
+  {
+    name: "write_file",
+    description: "Write content to a file",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        content: { type: "string" },
+      },
+      required: ["path", "content"],
+    },
+  },
+];
+
+// Wrap with Veto policies
+const veto = await Veto.init();
+const safeMcpTools = veto.wrap(mcpTools);
+```
+
+With a YAML rule like:
+
+```yaml
+rules:
+  - id: restrict-commands
+    name: Block dangerous shell commands
+    action: block
+    tools:
+      - execute_command
+    conditions:
+      - field: arguments.command
+        operator: matches
+        value: "^(rm -rf|sudo|chmod 777)"
+```
+
+## Exports
+
+| Import | What |
+|--------|------|
+| `fromMCP` | Convert a single MCP tool to Veto's internal format |
+| `isMCPTool` | Type guard — returns `true` if the tool has `inputSchema` |
+| `MCPTool` | TypeScript type for MCP tool definitions |
+| `MCPToolResult` | TypeScript type for MCP tool results |
+
+All available from `veto-sdk/providers`.

@@ -1,13 +1,15 @@
 ---
 title: Constraints Reference
-description: Every constraint type supported by Veto's deterministic validation — numbers, strings, arrays, and presence checks.
+description: Every constraint type supported by Veto — policy constraints, YAML rule operators, and presence checks.
 ---
 
-Constraints are the building blocks of deterministic policies. Each constraint targets a single argument and checks one condition. A tool call is denied if any constraint fails.
+Veto supports two constraint systems: **policy constraints** (configured in the dashboard or policy API) and **YAML rule conditions** (configured in `veto/rules/*.yaml`). Both work in local, cloud, and self-hosted modes.
 
-Constraints are configured per-tool in the [Veto dashboard](https://runveto.com) or via the policy API. They apply to both client-side and server-side deterministic validation.
+## Policy constraints
 
-## Number constraints
+Policy constraints are configured per-tool in the [Veto dashboard](https://runveto.com) or via the policy API. They apply to both client-side and server-side deterministic validation.
+
+### Number constraints
 
 | Constraint | Description | Example |
 |-----------|-------------|---------|
@@ -37,7 +39,7 @@ If the agent calls `transfer_funds({ amount: 7500 })`, it's denied with:
 }
 ```
 
-## String constraints
+### String constraints
 
 | Constraint | Description | Example |
 |-----------|-------------|---------|
@@ -48,35 +50,14 @@ If the agent calls `transfer_funds({ amount: 7500 })`, it's denied with:
 
 Regex patterns are capped at 256 characters and checked for ReDoS safety before execution.
 
-**Example policy:** Only allow sending to approved domains
-
-```
-argument: to
-regex: "^[^@]+@(company\\.com|partner\\.org)$"
-```
-
-**Example policy:** Restrict currency to known values
-
-```
-argument: currency
-enum: ["USD", "EUR", "GBP", "JPY"]
-```
-
-## Array constraints
+### Array constraints
 
 | Constraint | Description | Example |
 |-----------|-------------|---------|
 | `minItems` | Array must have at least N elements | `minItems: 1` — no empty lists |
 | `maxItems` | Array must have at most N elements | `maxItems: 10` — limit batch size |
 
-**Example policy:** Limit bulk operations to 50 items
-
-```
-argument: ids
-maxItems: 50
-```
-
-## Presence constraints
+### Presence constraints
 
 | Constraint | Description | Example |
 |-----------|-------------|---------|
@@ -84,6 +65,101 @@ maxItems: 50
 | `notNull` | Argument cannot be null/None | `notNull: true` — must have a value |
 
 `required` checks that the key exists in the arguments object. `notNull` additionally checks that the value is not null.
+
+## YAML rule condition operators
+
+YAML rules in `veto/rules/*.yaml` use a `conditions` array with `field`, `operator`, and `value` fields. These operators are evaluated locally in all modes.
+
+| Operator | Type | Description |
+|----------|------|-------------|
+| `equals` | any | Exact match |
+| `not_equals` | any | Must not equal |
+| `contains` | string | Must contain substring |
+| `not_contains` | string | Must NOT contain substring |
+| `starts_with` | string | Must start with prefix |
+| `ends_with` | string | Must end with suffix |
+| `matches` | string | Regex pattern match (max 256 chars, ReDoS-safe) |
+| `in` | string/number | Value in allowlist (array) |
+| `not_in` | string/number | Value NOT in denylist (array) |
+| `greater_than` | number | Value must be > threshold |
+| `less_than` | number | Value must be < threshold |
+
+### YAML examples
+
+**Block emails outside company domain:**
+
+```yaml
+rules:
+  - id: company-email-only
+    name: Restrict to company domain
+    action: block
+    tools:
+      - send_email
+    conditions:
+      - field: arguments.to
+        operator: matches
+        value: "^[^@]+@company\\.com$"
+```
+
+**Restrict currencies to allowlist:**
+
+```yaml
+rules:
+  - id: allowed-currencies
+    name: Only allow approved currencies
+    action: block
+    tools:
+      - transfer_funds
+    conditions:
+      - field: arguments.currency
+        operator: not_in
+        value: ["USD", "EUR", "GBP"]
+```
+
+**Block file writes outside project directory:**
+
+```yaml
+rules:
+  - id: restrict-file-writes
+    name: Block writes outside project
+    action: block
+    tools:
+      - write_file
+    conditions:
+      - field: arguments.path
+        operator: starts_with
+        value: "/etc"
+```
+
+**Block specific values:**
+
+```yaml
+rules:
+  - id: no-admin-role
+    name: Prevent assigning admin role
+    action: block
+    tools:
+      - assign_role
+    conditions:
+      - field: arguments.role
+        operator: equals
+        value: "admin"
+```
+
+**Block messages containing sensitive keywords:**
+
+```yaml
+rules:
+  - id: no-secrets-in-messages
+    name: Block messages with secret content
+    action: block
+    tools:
+      - send_message
+    conditions:
+      - field: arguments.body
+        operator: not_contains
+        value: "password"
+```
 
 ## Combining constraints
 

@@ -1,16 +1,32 @@
 ---
 title: Validation Modes
-description: How Veto validates tool calls — cloud, API, custom, and kernel modes.
+description: How Veto validates tool calls — local, cloud, API, custom, and kernel modes.
 ---
 
-Veto supports four validation modes. Set the mode in `veto.config.yaml`:
+Veto supports five validation modes. The SDK auto-detects the mode from your init options and environment. You can also set it explicitly in `veto.config.yaml`:
 
 ```yaml
 validation:
-  mode: "cloud"  # "cloud" | "api" | "custom" | "kernel"
+  mode: "local"  # "local" | "cloud" | "api" | "custom" | "kernel"
 ```
 
-## Cloud mode (recommended)
+## Local mode (default)
+
+Evaluates YAML rules from `./veto/rules/*.yaml` entirely in-process. No network calls, no API key, no account.
+
+```yaml
+# No validation.mode needed — local is the default
+version: "1.0"
+mode: "strict"
+```
+
+Supports all YAML condition operators: `equals`, `not_equals`, `contains`, `not_contains`, `starts_with`, `ends_with`, `matches`, `in`, `not_in`, `greater_than`, `less_than`. Also supports expression-based conditions from the compiled rule format.
+
+Activated automatically when no `apiKey`, `endpoint`, or explicit `validation.mode` is configured.
+
+See [SDK Modes](/docs/concepts/modes) for the full auto-detection precedence.
+
+## Cloud mode
 
 Routes validation through the Veto Cloud API. Policies are managed in the [dashboard](https://runveto.com) — the SDK fetches and caches them automatically.
 

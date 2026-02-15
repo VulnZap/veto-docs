@@ -51,3 +51,7 @@ veto/
 └── rules/
     └── default.yaml    # Default rule file
 ```
+
+The generated config defaults to **local mode** — rules are evaluated in-process with zero network calls. No API key or account needed.
+
+To switch to cloud mode later, set `VETO_API_KEY` or pass `apiKey` to `Veto.init()`. See [SDK Modes](/docs/concepts/modes) for details.

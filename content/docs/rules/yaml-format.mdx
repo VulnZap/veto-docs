@@ -46,14 +46,19 @@ rules:
 
 ## Condition operators
 
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `equals` | Exact match | `value: "admin"` |
-| `contains` | Substring match | `value: "password"` |
-| `starts_with` | Prefix match | `value: "/etc"` |
-| `ends_with` | Suffix match | `value: ".exe"` |
-| `greater_than` | Numeric comparison | `value: 1000` |
-| `less_than` | Numeric comparison | `value: 0` |
+| Operator | Type | Description | Example |
+|----------|------|-------------|---------|
+| `equals` | any | Exact match | `value: "admin"` |
+| `not_equals` | any | Must not equal | `value: "admin"` |
+| `contains` | string | Substring match | `value: "password"` |
+| `not_contains` | string | Must NOT contain | `value: "secret"` |
+| `starts_with` | string | Prefix match | `value: "/etc"` |
+| `ends_with` | string | Suffix match | `value: ".exe"` |
+| `matches` | string | Regex pattern (max 256 chars, ReDoS-safe) | `value: "^[^@]+@company\\.com$"` |
+| `in` | string/number | Value in allowlist | `value: ["USD", "EUR"]` |
+| `not_in` | string/number | Value NOT in denylist | `value: ["admin", "root"]` |
+| `greater_than` | number | Numeric > comparison | `value: 1000` |
+| `less_than` | number | Numeric < comparison | `value: 0` |
 
 ## Rule matching logic
 
