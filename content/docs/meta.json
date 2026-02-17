@@ -5,15 +5,15 @@
     "index",
     "---Getting Started---",
     "...getting-started",
-    "---Concepts---",
-    "...concepts",
     "---SDKs---",
     "...sdk",
     "---Integrations---",
     "...integrations",
-    "---Rules---",
+    "---Rules & Policies---",
     "...rules",
-    "---API Reference---",
+    "---Concepts---",
+    "...concepts",
+    "---Server API---",
     "...api-reference"
   ]
 }
