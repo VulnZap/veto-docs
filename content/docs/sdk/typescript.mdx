@@ -121,7 +121,7 @@ try {
 When an approval poll times out, Veto throws an `ApprovalTimeoutError`:
 
 ```typescript
-import { ApprovalTimeoutError } from 'veto-sdk/cloud';
+import { ApprovalTimeoutError } from 'veto-sdk';
 
 try {
   await wrappedTool.invoke(args);
@@ -238,7 +238,7 @@ After max age, the cache entry expires and the next validation falls through to 
 Standalone client for direct cloud API interaction. Used internally by `Veto`, but also available for advanced use cases.
 
 ```typescript
-import { VetoCloudClient } from 'veto-sdk/cloud';
+import { VetoCloudClient } from 'veto-sdk';
 
 const client = new VetoCloudClient({
   config: {
@@ -349,10 +349,10 @@ The SDK provides deep integrations with popular AI frameworks. Each integration 
 The SDK includes adapters that convert tool definitions between formats:
 
 ```typescript
-import { adapters } from 'veto-sdk/providers';
+import { toAnthropic, toOpenAI } from 'veto-sdk/providers/adapters';
 
-const anthropicTools = adapters.toAnthropic(openAITools);
-const openAITools = adapters.toOpenAI(anthropicTools);
+const anthropicTools = toAnthropic(openAITools);
+const openAITools = toOpenAI(anthropicTools);
 ```
 
 MCP tools are converted automatically by `veto.wrap()`. For manual use:
@@ -369,9 +369,8 @@ if (isMCPTool(tool)) {
 
 | Import | What it provides |
 |--------|-----------------|
-| `veto-sdk` | Core `Veto` class, `ToolCallDeniedError`, `BudgetExceededError`, `BudgetStatus` |
-| `veto-sdk/providers` | Provider adapters, `fromMCP`, `isMCPTool`, `MCPTool`, `MCPToolResult` |
-| `veto-sdk/cloud` | `VetoCloudClient`, `ApprovalTimeoutError` |
+| `veto-sdk` | Core `Veto` class, `ToolCallDeniedError`, `BudgetExceededError`, `BudgetStatus`, `VetoCloudClient`, `ApprovalTimeoutError` |
+| `veto-sdk/providers/*` | Provider adapters (`toOpenAI`, `fromOpenAI`, `toAnthropic`, `fromAnthropic`, `fromMCP`, `isMCPTool`) |
 | `veto-sdk/rules` | Rule parsing and matching utilities |
 | `veto-sdk/kernel` | Local model evaluation via Ollama |
 | `veto-sdk/custom` | Direct LLM provider integration |

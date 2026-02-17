@@ -521,7 +521,7 @@ Each record: `timestamp`, `tool_name`, `arguments`, `policy_version`, `rule_id`,
 
 ```typescript
 import { ToolCallDeniedError, BudgetExceededError } from 'veto-sdk';
-import { ApprovalTimeoutError } from 'veto-sdk/cloud';
+import { ApprovalTimeoutError } from 'veto-sdk';
 
 // ToolCallDeniedError: error.message, error.ruleId
 // BudgetExceededError: error.spent, error.limit, error.remaining, error.toolName, error.toolCost
@@ -531,7 +531,7 @@ import { ApprovalTimeoutError } from 'veto-sdk/cloud';
 ### Cloud client
 
 ```typescript
-import { VetoCloudClient } from 'veto-sdk/cloud';
+import { VetoCloudClient } from 'veto-sdk';
 
 const client = new VetoCloudClient({ config: { apiKey, baseUrl, timeout, retries, retryDelay }, logger });
 
@@ -556,9 +556,8 @@ veto.clearApprovalPreferences();
 
 | Import | What it provides |
 |--------|-----------------|
-| `veto-sdk` | Core `Veto`, `ToolCallDeniedError`, `BudgetExceededError`, `BudgetStatus` |
-| `veto-sdk/providers` | Provider adapters, `fromMCP`, `isMCPTool` |
-| `veto-sdk/cloud` | `VetoCloudClient`, `ApprovalTimeoutError` |
+| `veto-sdk` | Core `Veto`, `ToolCallDeniedError`, `BudgetExceededError`, `BudgetStatus`, `VetoCloudClient`, `ApprovalTimeoutError` |
+| `veto-sdk/providers/*` | Provider adapters (`toOpenAI`, `fromOpenAI`, `toAnthropic`, `fromAnthropic`, `fromMCP`, `isMCPTool`) |
 | `veto-sdk/rules` | Rule parsing and matching |
 | `veto-sdk/kernel` | Local model evaluation via Ollama |
 | `veto-sdk/custom` | Direct LLM provider integration |
