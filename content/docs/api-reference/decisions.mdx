@@ -1,17 +1,134 @@
 ---
-title: POST /v1/decisions
-description: Log a client-side validation decision — keeps the dashboard audit trail complete.
+title: Decisions API
+description: Query, aggregate, and log validation decisions — the audit trail for every tool call.
 ---
 
-When the SDK validates a tool call locally (client-side deterministic), it logs the decision back to the server so the dashboard and audit trail stay accurate.
+Every tool call validated by Veto produces a decision record. These endpoints let you query, aggregate, and log decisions.
 
-This endpoint is called automatically by the SDK. You do not need to call it directly.
+## GET /v1/decisions
 
-## Request
+List decisions with pagination and filtering.
 
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Veto-API-Key` or `Authorization` | Yes | API key or Bearer JWT |
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | `number` | `50` | Results per page (1–100) |
+| `offset` | `number` | `0` | Skip this many results |
+| `projectId` | `string (UUID)` | — | Filter by project |
+| `toolName` | `string` | — | Filter by tool name |
+| `decision` | `"allow" \| "deny"` | — | Filter by decision |
+| `startDate` | `ISO 8601 date` | — | Filter from this date |
+| `endDate` | `ISO 8601 date` | — | Filter until this date |
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "d7f2a1b3-4c5e-6f78-9a0b-1c2d3e4f5a6b",
+      "toolName": "transfer_funds",
+      "arguments": { "amount": 500, "to": "vendor-123" },
+      "context": { "session_id": "sess_abc123", "source": "client" },
+      "decision": "allow",
+      "mode": "deterministic",
+      "reason": "All constraints passed",
+      "failedArgument": null,
+      "matchedException": null,
+      "validations": null,
+      "latencyMs": 2,
+      "createdAt": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "pagination": {
+    "total": 1247,
+    "limit": 50,
+    "offset": 0,
+    "hasMore": true
+  }
+}
 ```
-POST /v1/decisions
+
+## GET /v1/decisions/stats
+
+Aggregated decision statistics over a time period.
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Veto-API-Key` or `Authorization` | Yes | API key or Bearer JWT |
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `days` | `number` | `7` | Lookback period (1–90) |
+| `projectId` | `string (UUID)` | — | Filter by project |
+
+### Response
+
+```json
+{
+  "period": { "days": 7 },
+  "summary": {
+    "total": 1247,
+    "allowed": 1180,
+    "denied": 67,
+    "deterministic": 1100,
+    "llm": 147
+  },
+  "breakdown": [
+    {
+      "date": "2025-01-15",
+      "allowed": 180,
+      "denied": 12,
+      "deterministic": 160,
+      "llm": 32
+    }
+  ]
+}
 ```
+
+## GET /v1/decisions/:id
+
+Get a single decision by ID.
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Veto-API-Key` or `Authorization` | Yes | API key or Bearer JWT |
+
+### Path parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `string (UUID)` | Decision ID |
+
+### Response
+
+Same shape as individual items in the `GET /v1/decisions` `data` array.
+
+### Errors
+
+| Status | Description |
+|--------|-------------|
+| 400 | Invalid UUID format |
+| 404 | Decision not found |
+
+## POST /v1/decisions
+
+Log a client-side validation decision. Keeps the dashboard audit trail complete when the SDK validates locally.
+
+Called automatically by the SDK — you do not need to call this directly.
 
 ### Headers
 
@@ -49,9 +166,7 @@ POST /v1/decisions
 | `source` | `"client"` | Yes | Must be `"client"` |
 | `context` | `object` | No | Additional metadata (session_id, agent_id, etc.) |
 
-## Response
-
-### Success
+### Response (201)
 
 ```json
 {
@@ -60,31 +175,19 @@ POST /v1/decisions
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `success` | `boolean` | Whether the decision was logged |
-| `id` | `string` | UUID of the created decision record |
+### Errors
 
-### Error: missing project
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | `missing_project` | API key must be scoped to a project |
 
-```json
-{
-  "error": {
-    "code": "missing_project",
-    "message": "API key must be scoped to a project"
-  }
-}
-```
-
-Returned when the API key is org-scoped but not project-scoped. Decision logging requires a project context.
-
-## Rate limiting
+### Rate limiting
 
 120 requests per 60 seconds per API key.
 
 ## SDK behavior
 
-The SDK calls this endpoint automatically after every client-side deterministic validation. The call is fire-and-forget — errors are silently swallowed so they never block tool execution.
+The SDK calls `POST /v1/decisions` automatically after every client-side deterministic validation. The call is fire-and-forget — errors are silently swallowed so they never block tool execution.
 
 Both TypeScript and Python SDKs use the same behavior:
 

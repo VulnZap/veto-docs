@@ -1,0 +1,142 @@
+---
+title: Vercel AI SDK Integration
+description: Use Veto as middleware for the Vercel AI SDK — validates tool calls in both generateText and streamText.
+---
+
+Veto provides a Vercel AI SDK middleware that intercepts tool calls between model output and execution. Works with both `generateText` (synchronous) and `streamText` (streaming).
+
+TypeScript only — no Python equivalent.
+
+## Installation
+
+```bash
+npm install veto-sdk ai @ai-sdk/openai
+```
+
+## Quick start
+
+```typescript
+import { Veto } from 'veto-sdk';
+import { createVetoMiddleware } from 'veto-sdk/integrations/vercel-ai';
+import { generateText, wrapLanguageModel } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const veto = await Veto.init();
+const middleware = createVetoMiddleware(veto);
+
+const model = wrapLanguageModel({
+  model: openai('gpt-4o'),
+  middleware,
+});
+
+const result = await generateText({
+  model,
+  tools: myTools,
+  prompt: "Send an email to alice@example.com",
+});
+```
+
+## Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `onAllow` | `(toolName, args) => void` | — | Called when a tool call passes validation |
+| `onDeny` | `(toolName, args, reason) => void` | — | Called when a tool call is denied |
+| `throwOnDeny` | `boolean` | `false` | In streaming mode, throw instead of silently dropping denied calls |
+
+## How it works
+
+The middleware implements the Vercel AI SDK's `v3` specification with `wrapGenerate` and `wrapStream` hooks.
+
+### `generateText` mode
+
+After the model generates tool calls, the middleware validates each one before `execute()` runs:
+
+```
+Model generates tool calls
+         │
+         ▼
+  Veto validates each call
+         │
+    ┌────┴────┐
+    │         │
+  allow     deny
+    │         │
+    ▼         ▼
+  execute   ToolCallDeniedError
+```
+
+In `generateText`, denied tool calls **always throw** `ToolCallDeniedError` regardless of the `throwOnDeny` setting.
+
+### `streamText` mode
+
+In streaming mode, the middleware buffers tool-related chunks (`tool-input-start`, `tool-input-delta`, `tool-input-end`) until the `tool-call` chunk arrives. At that point it validates:
+
+```
+Stream chunks arrive
+         │
+         ▼
+  Buffer tool-input-* chunks
+         │
+         ▼
+  tool-call chunk arrives → validate
+         │
+    ┌────┴────┐
+    │         │
+  allow     deny
+    │         │
+    ▼         ▼
+  flush    drop silently
+  buffered (or throw if
+  chunks   throwOnDeny)
+```
+
+- **`throwOnDeny: false`** (default): Denied tool calls are silently dropped from the stream. The consumer never sees them.
+- **`throwOnDeny: true`**: Throws `ToolCallDeniedError` on the first denied call.
+
+### Argument modification
+
+When Veto's validation modifies the tool call arguments (via `finalArguments`), the middleware forwards the modified arguments to `execute()`:
+
+- In `generateText`: replaces `toolCall.args` directly
+- In `streamText`: emits a single modified chunk instead of the buffered input deltas
+
+## Example with streaming
+
+```typescript
+import { streamText, wrapLanguageModel } from 'ai';
+import { createVetoMiddleware } from 'veto-sdk/integrations/vercel-ai';
+
+const middleware = createVetoMiddleware(veto, {
+  onDeny: (toolName, args, reason) => {
+    console.warn(`Blocked ${toolName}: ${reason}`);
+  },
+  throwOnDeny: true,
+});
+
+const model = wrapLanguageModel({
+  model: openai('gpt-4o'),
+  middleware,
+});
+
+const result = streamText({
+  model,
+  tools: myTools,
+  prompt: "Transfer $50,000 to external account",
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Exports
+
+```typescript
+import { createVetoMiddleware } from 'veto-sdk/integrations/vercel-ai';
+
+import type {
+  VetoVercelMiddleware,
+  CreateVetoMiddlewareOptions,
+} from 'veto-sdk/integrations/vercel-ai';
+```

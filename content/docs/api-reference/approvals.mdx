@@ -1,29 +1,97 @@
 ---
-title: GET /v1/approvals/:id
-description: Poll an approval record — used by the SDK to wait for human review.
+title: Approvals API
+description: Endpoints for human-in-the-loop approval workflows — list, create, poll, and resolve approvals.
 ---
 
-When the validation endpoint returns `require_approval`, the SDK polls this endpoint until the approval is resolved by a human or expires.
+The approvals API powers Veto's human-in-the-loop (HITL) workflow. When a policy requires human review, an approval record is created and the SDK polls until a human resolves it.
 
-## Request
+HITL requires the **Team** plan or above.
 
-```
-GET /v1/approvals/:id
-```
+## GET /v1/approvals/pending
+
+List all pending approvals for the current organization.
 
 ### Headers
 
 | Header | Required | Description |
 |--------|----------|-------------|
-| `X-Veto-API-Key` | Yes | API key for authentication |
+| `X-Veto-API-Key` or `Authorization` | Yes | API key or Bearer JWT |
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "apr_abc123def456",
+      "toolName": "transfer_funds",
+      "arguments": { "amount": 5000, "to": "vendor-123" },
+      "status": "pending",
+      "expiresAt": "2025-01-15T10:35:00Z",
+      "createdAt": "2025-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+## POST /v1/approvals
+
+Create an approval request manually. Useful for triggering HITL outside the normal validation flow.
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Veto-API-Key` or `Authorization` | Yes | API key or Bearer JWT |
+| `Content-Type` | Yes | `application/json` |
+
+### Body
+
+```json
+{
+  "decisionId": "d7f2a1b3-4c5e-6f78-9a0b-1c2d3e4f5a6b",
+  "toolName": "transfer_funds",
+  "arguments": { "amount": 5000, "to": "vendor-123" },
+  "expiresInSeconds": 3600
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `decisionId` | `string (UUID)` | No | Link to an existing decision record |
+| `toolName` | `string` | Yes | Name of the tool awaiting approval |
+| `arguments` | `object` | No | Tool call arguments for reviewer context |
+| `expiresInSeconds` | `number` | No | TTL in seconds (60–86400, default: 3600) |
+
+### Response (201)
+
+```json
+{
+  "id": "apr_abc123def456",
+  "toolName": "transfer_funds",
+  "status": "pending",
+  "expiresAt": "2025-01-15T11:30:00Z",
+  "createdAt": "2025-01-15T10:30:00Z"
+}
+```
+
+## GET /v1/approvals/:id
+
+Poll an approval record. The SDK calls this automatically — you do not need to call it directly.
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Veto-API-Key` or `Authorization` | Yes | API key or Bearer JWT |
 
 ### Path parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `id` | `string` | The approval ID returned by the validate endpoint |
+| `id` | `string` | The approval ID |
 
-## Response
+### Response
 
 ### Pending
 
@@ -86,9 +154,59 @@ GET /v1/approvals/:id
 | `createdAt` | `string?` | ISO 8601 timestamp of creation |
 | `expiresAt` | `string?` | ISO 8601 timestamp of expiration |
 
+## POST /v1/approvals/:id/resolve
+
+Resolve a pending approval — approve or deny.
+
+### Headers
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Veto-API-Key` or `Authorization` | Yes | API key or Bearer JWT |
+| `Content-Type` | Yes | `application/json` |
+
+### Path parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `string` | The approval ID to resolve |
+
+### Body
+
+```json
+{
+  "action": "approve",
+  "resolvedBy": "user@company.com"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `action` | `"approve" \| "deny"` | Yes | Resolution action |
+| `resolvedBy` | `string` | Yes | Identifier of the person resolving |
+
+### Response
+
+```json
+{
+  "id": "apr_abc123def456",
+  "status": "approved",
+  "resolvedBy": "user@company.com",
+  "resolvedAt": "2025-01-15T10:31:15Z"
+}
+```
+
+### Errors
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 404 | `not_found` | Approval ID does not exist |
+| 410 | `expired` | Approval has already expired |
+| 400 | `invalid_status` | Approval is already resolved |
+
 ## SDK behavior
 
-The SDK handles polling automatically. You do not need to call this endpoint directly. The polling flow:
+The SDK handles polling automatically. The flow:
 
 1. Validate endpoint returns `{ decision: "require_approval", approval_id: "apr_..." }`
 2. SDK fires the `onApprovalRequired` / `on_approval_required` hook

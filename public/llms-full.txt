@@ -1,0 +1,1052 @@
+# Veto
+
+> The authorization kernel for AI agents. Intercept, validate, and control every tool call. Veto sits between an AI agent and its tools — the agent never knows the guardrail exists.
+
+You interact with Veto entirely through the SDK. Install it, wrap your tools, define your rules. The SDK auto-detects which mode to use:
+
+- **Local** (default): `Veto.init()` — YAML rules evaluated in-process, zero network calls
+- **Cloud** (recommended): `Veto.init({ apiKey: "veto_..." })` — dashboard, analytics, human-in-the-loop approvals, LLM validation
+- **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — same features as cloud, on your infrastructure
+
+TypeScript SDK: `npm install veto-sdk` (v1.7.0)
+Python SDK: `pip install veto` (v0.7.0)
+
+---
+
+## What is Veto?
+
+Veto is the authorization layer between an AI agent and its tools. Every tool call is intercepted, validated against your policies, and either allowed, blocked, or escalated for human approval. The agent never knows the guardrail exists.
+
+```
+Agent calls tool ──▶ Veto validates ──▶ Tool executes
+                          │
+                     ┌────┴────┐
+                     │         │
+                   allow     deny / require approval
+```
+
+### Three runtime modes
+
+Veto auto-detects which mode to use based on how you initialize it:
+
+| Mode | Activated by | What happens |
+|------|-------------|-------------|
+| **Local** (default) | Nothing — just `Veto.init()` | Rules from `./veto/rules/*.yaml` evaluated in-process. Zero network calls. |
+| **Cloud** | `apiKey` or `VETO_API_KEY` | Policies from the dashboard. Deterministic cached locally, LLM via server. |
+| **Self-hosted** | `endpoint` URL | Same as cloud, on your infrastructure. |
+
+### Features
+
+- **Local-first** — works out of the box with YAML rules, no API key or account needed
+- **Provider agnostic** — OpenAI, Anthropic, Google, LangChain, Vercel AI SDK, MCP, browser-use
+- **Budget constraints** — per-session cost circuit breaker for tool calls
+- **CLI tooling** — `veto compile` (NL → rules), `veto learn` (observe → generate), `veto test` (gap analysis)
+- **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
+- **LLM validation** — natural language policies for cases static rules can't cover
+- **Session-aware** — track per-session call counts, argument history, and cross-tool constraints
+- **TypeScript + Python** — identical APIs, identical behavior
+- **Real-time dashboard** — monitor every decision at runveto.com
+
+---
+
+## Installation
+
+### TypeScript
+
+```bash
+npm install veto-sdk
+```
+
+Or with your preferred package manager:
+
+```bash
+pnpm add veto-sdk
+yarn add veto-sdk
+```
+
+### Python
+
+```bash
+pip install veto
+```
+
+With LLM provider support:
+
+```bash
+pip install veto[openai]      # OpenAI support
+pip install veto[anthropic]   # Anthropic support
+pip install veto[gemini]      # Google Gemini support
+pip install veto[all]         # All providers
+```
+
+### Initialize configuration
+
+```bash
+# TypeScript
+npx veto init
+
+# Python
+veto init
+```
+
+This creates a `veto/` directory:
+
+```
+veto/
+├── veto.config.yaml    # Main configuration
+└── rules/
+    └── default.yaml    # Default rule file
+```
+
+The generated config defaults to **local mode** — rules are evaluated in-process with zero network calls.
+
+---
+
+## Quick Start
+
+### 1. Install
+
+```bash
+npm install veto-sdk
+```
+
+### 2. Init and write a rule
+
+```bash
+npx veto init
+```
+
+Edit `veto/rules/default.yaml`:
+
+```yaml
+rules:
+  - id: limit-transfers
+    name: Block large transfers
+    action: block
+    severity: critical
+    tools:
+      - transfer_funds
+    conditions:
+      - field: arguments.amount
+        operator: greater_than
+        value: 10000
+```
+
+### 3. Wrap your tools
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+const wrappedTools = veto.wrap(myTools);
+
+const agent = createAgent({ tools: wrappedTools });
+```
+
+Every tool call is now validated. If the agent tries `transfer_funds({ amount: 50000 })`, it throws `ToolCallDeniedError`.
+
+### Framework examples
+
+**OpenAI:**
+
+```typescript
+import OpenAI from 'openai';
+import { Veto } from 'veto-sdk';
+
+const openai = new OpenAI();
+const veto = await Veto.init();
+
+const tools = veto.wrap([
+  {
+    type: 'function',
+    function: {
+      name: 'transfer_funds',
+      description: 'Transfer money to an account',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: { type: 'number' },
+          to: { type: 'string' },
+        },
+      },
+    },
+  },
+]);
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  tools,
+  messages: [{ role: 'user', content: 'Transfer $500 to Alice' }],
+});
+```
+
+**Anthropic:**
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import { Veto } from 'veto-sdk';
+
+const anthropic = new Anthropic();
+const veto = await Veto.init();
+
+const tools = veto.wrap([
+  {
+    name: 'send_email',
+    description: 'Send an email',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string' },
+        subject: { type: 'string' },
+        body: { type: 'string' },
+      },
+    },
+  },
+]);
+
+const response = await anthropic.messages.create({
+  model: 'claude-sonnet-4-5-20250929',
+  max_tokens: 1024,
+  tools,
+  messages: [{ role: 'user', content: 'Email the team about the outage' }],
+});
+```
+
+**Vercel AI SDK:**
+
+```typescript
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { Veto } from 'veto-sdk';
+import { z } from 'zod';
+
+const veto = await Veto.init();
+
+const tools = veto.wrap({
+  transferFunds: tool({
+    description: 'Transfer money',
+    parameters: z.object({
+      amount: z.number(),
+      to: z.string(),
+    }),
+    execute: async ({ amount, to }) => {
+      return { success: true, amount, to };
+    },
+  }),
+});
+
+const result = await generateText({
+  model: openai('gpt-4o'),
+  tools,
+  prompt: 'Transfer $500 to Alice',
+});
+```
+
+**Python (OpenAI):**
+
+```python
+from openai import OpenAI
+from veto import Veto
+
+client = OpenAI()
+veto = await Veto.init()
+
+tools = veto.wrap([
+    {
+        "type": "function",
+        "function": {
+            "name": "transfer_funds",
+            "description": "Transfer money to an account",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "amount": {"type": "number"},
+                    "to": {"type": "string"},
+                },
+            },
+        },
+    },
+])
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    tools=tools,
+    messages=[{"role": "user", "content": "Transfer $500 to Alice"}],
+)
+```
+
+---
+
+## How Validation Works
+
+When you wrap tools with the Veto SDK, every tool call goes through a validation pipeline. The pipeline picks the fastest validation path that can handle your policy.
+
+### The validation pipeline
+
+```
+Agent calls wrapped tool
+         │
+         ▼
+  ┌─────────────────┐
+  │ Is the policy    │──── no ───▶ POST /v1/tools/validate
+  │ cached locally?  │            (server-side validation)
+  └────────┬────────┘
+           │ yes
+           ▼
+  ┌─────────────────┐
+  │ Policy mode is   │──── no ───▶ POST /v1/tools/validate
+  │ deterministic?   │            (server-side LLM)
+  └────────┬────────┘
+           │ yes
+           ▼
+  ┌─────────────────┐
+  │ Has session or   │──── yes ──▶ POST /v1/tools/validate
+  │ rate constraints? │            (server handles state)
+  └────────┬────────┘
+           │ no
+           ▼
+  Run constraints locally (~1-5ms)
+           │
+      ┌────┴────┐
+      │         │
+    allow     deny
+      │         │
+      ▼         ▼
+  Tool runs   ToolCallDeniedError
+      │         │
+      └────┬────┘
+           ▼
+  POST /v1/decisions (async, fire-and-forget)
+```
+
+### Path 1: Client-side deterministic
+
+The fastest path. The SDK evaluates constraints locally using a cached copy of the policy.
+
+**When it triggers:**
+- The tool's policy is cached (fetched on first call, background-refreshed every 60s)
+- The policy mode is `deterministic`
+- The policy has no session constraints or rate limits
+
+**What it checks:**
+- Number ranges (`minimum`, `maximum`, `greaterThan`, `lessThan`)
+- String validation (`enum`, `regex`, `minLength`, `maxLength`)
+- Array bounds (`minItems`, `maxItems`)
+- Required/null checks (`required`, `notNull`)
+
+**Latency:** ~1-5ms (no network call)
+
+### Path 2: Server-side deterministic
+
+**When it triggers:**
+- Cache miss (first call for a tool, or policy expired)
+- Policy has session constraints or rate limits
+
+**What it checks:** Everything client-side checks, plus:
+- Session constraints (e.g. "max 3 calls to `delete_record` per session")
+- Rate limits (e.g. "max 10 calls per minute")
+- Cross-tool constraints
+
+**Latency:** ~30-50ms (one network round-trip)
+
+### Path 3: Server-side LLM
+
+**When it triggers:**
+- Policy mode is `llm`
+
+**What it checks:**
+- Semantic evaluation against the policy description
+- Exception lists
+- Complex multi-argument relationships
+- Context-dependent decisions
+
+**Latency:** ~500-2000ms (network + LLM inference)
+
+### Policy cache
+
+| Window | Duration | Behavior |
+|--------|----------|----------|
+| **Fresh** | 0 – 60s | Serve from cache immediately |
+| **Stale** | 60s – 5min | Serve from cache, refresh in background |
+| **Expired** | > 5min | Cache miss, fall through to server |
+
+### Session-aware validation
+
+Veto can track per-session state — call counts, cumulative argument values — and enforce constraints across multiple tool calls.
+
+Pass `sessionId` when initializing:
+
+```typescript
+const veto = await Veto.init({ sessionId: "session_abc123" });
+```
+
+Session constraint types:
+
+| Constraint | Description |
+|-----------|-------------|
+| `maxCalls` | Maximum calls to a tool per session |
+| `cumulativeLimits` | Running sum of a numeric argument across calls |
+
+Session state shape:
+
+```json
+{
+  "callCounts": { "transfer_funds": 3, "delete_record": 1 },
+  "cumulativeValues": { "transfer_funds": { "amount": 4500 } }
+}
+```
+
+### Plan limits
+
+| Feature | Free | Team | Business | Enterprise |
+|---------|------|------|----------|------------|
+| Decisions/month | 10,000 | 100,000 | 1,000,000 | Unlimited |
+| Agents | 1 | 10 | Unlimited | Unlimited |
+| Log retention | 7 days | 30 days | 90 days | Unlimited |
+| Dashboard | — | Yes | Yes | Yes |
+| Human-in-the-loop | — | Yes | Yes | Yes |
+| Analytics | — | — | Yes | Yes |
+| Compliance exports | — | — | Yes | Yes |
+| SSO | — | — | Yes | Yes |
+
+---
+
+## SDK Modes
+
+The SDK auto-detects which mode to use:
+
+| Priority | Condition | Mode |
+|----------|-----------|------|
+| 1 | `options.endpoint` is set | **Self-hosted** |
+| 2 | `options.apiKey` is set | **Cloud** |
+| 3 | `config.validation.mode` is set explicitly | Uses that mode |
+| 4 | `VETO_API_KEY` env var is set | **Cloud** |
+| 5 | Nothing | **Local** (default) |
+
+### Local mode (default)
+
+```typescript
+const veto = await Veto.init();
+```
+
+Zero network calls. Rules loaded from `./veto/rules/*.yaml`.
+
+### Cloud mode
+
+```typescript
+const veto = await Veto.init({ apiKey: "veto_..." });
+```
+
+Policies managed in the dashboard. Deterministic policies cached locally (~1-5ms). LLM policies route through server (~500-2000ms). Approval workflows pause until human resolves.
+
+### Self-hosted mode
+
+```typescript
+const veto = await Veto.init({ endpoint: "https://veto.internal.corp.com" });
+```
+
+Same as cloud, on your infrastructure.
+
+### Operating modes
+
+| Mode | Behavior |
+|------|----------|
+| `strict` | Blocks denied calls — throws `ToolCallDeniedError` |
+| `log` | Logs denied calls but allows execution to continue |
+
+---
+
+## TypeScript SDK (v1.7.0)
+
+### `Veto.init(options?)`
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const vetoLocal = await Veto.init();
+const vetoCloud = await Veto.init({ apiKey: "veto_..." });
+const vetoSelfHosted = await Veto.init({ endpoint: "https://veto.internal.corp.com" });
+```
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `configDir` | `string` | `"./veto"` | Path to config directory |
+| `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
+| `apiKey` | `string` | — | API key — triggers cloud mode |
+| `endpoint` | `string` | — | Server URL — triggers self-hosted mode |
+| `logLevel` | `string` | `"info"` | Log level |
+| `sessionId` | `string` | — | Session ID for tracking |
+| `agentId` | `string` | — | Agent ID for tracking |
+| `validators` | `Validator[]` | — | Additional validators |
+| `cloudClient` | `VetoCloudClient` | — | Injected cloud client |
+| `onApprovalRequired` | `(context, approvalId) => void` | — | Hook for human approval |
+
+### `veto.wrap<T>(tools: T[]): T[]`
+
+Wraps tools with validation. Returns identical types.
+
+```typescript
+const wrappedForOpenAI = veto.wrap(openAITools);
+const wrappedForAnthropic = veto.wrap(anthropicTools);
+const wrappedForVercel = veto.wrap(vercelTools);
+const wrappedForMCP = veto.wrap(mcpTools);
+```
+
+### `veto.wrapTool<T>(tool: T): T`
+
+Wraps a single tool.
+
+### `veto.getHistoryStats()`
+
+Returns `{ totalCalls, allowedCalls, deniedCalls, ... }`.
+
+### `veto.clearHistory()`
+
+Resets history statistics.
+
+### `veto.exportDecisions(options?)`
+
+Export decision history as JSON or CSV (v1.6.0+).
+
+```typescript
+const json = veto.exportDecisions();
+const csv = veto.exportDecisions({ format: 'csv' });
+```
+
+Each record: `timestamp`, `tool_name`, `arguments`, `policy_version`, `rule_id`, `decision`, `reason`.
+
+### Error handling
+
+```typescript
+import { ToolCallDeniedError, BudgetExceededError } from 'veto-sdk';
+import { ApprovalTimeoutError } from 'veto-sdk';
+
+// ToolCallDeniedError: error.message, error.ruleId
+// BudgetExceededError: error.spent, error.limit, error.remaining, error.toolName, error.toolCost
+// ApprovalTimeoutError: error.approvalId, error.timeoutMs
+```
+
+### Cloud client
+
+```typescript
+import { VetoCloudClient } from 'veto-sdk';
+
+const client = new VetoCloudClient({ config: { apiKey, baseUrl, timeout, retries, retryDelay }, logger });
+
+await client.validate(toolName, args, context?);
+await client.pollApproval(approvalId, options?);
+await client.fetchPolicy(toolName);
+client.logDecision(request);
+await client.registerTools(tools);
+```
+
+### Approval preferences
+
+```typescript
+veto.setApprovalPreference('read_file', 'approve_all');
+veto.setApprovalPreference('delete_database', 'deny_all');
+veto.getApprovalPreference('read_file');
+veto.clearApprovalPreferences('read_file');
+veto.clearApprovalPreferences();
+```
+
+### Exports
+
+| Import | What it provides |
+|--------|-----------------|
+| `veto-sdk` | Core `Veto`, `ToolCallDeniedError`, `BudgetExceededError`, `BudgetStatus`, `VetoCloudClient`, `ApprovalTimeoutError` |
+| `veto-sdk/providers/*` | Provider adapters (`toOpenAI`, `fromOpenAI`, `toAnthropic`, `fromAnthropic`, `fromMCP`, `isMCPTool`) |
+| `veto-sdk/rules` | Rule parsing and matching |
+| `veto-sdk/kernel` | Local model evaluation via Ollama |
+| `veto-sdk/custom` | Direct LLM provider integration |
+| `veto-sdk/compiler` | Rule compiler utilities |
+| `veto-sdk/benchmark` | Performance benchmarking |
+| `veto-sdk/integrations/langchain` | LangChain middleware, ToolNode, callback |
+| `veto-sdk/integrations/vercel-ai` | Vercel AI SDK middleware |
+| `veto-sdk/integrations/browser-use` | Browser-use controller wrapper |
+
+---
+
+## Python SDK (v0.7.0)
+
+### `Veto.init(options?)`
+
+```python
+from veto import Veto, VetoOptions
+
+veto = await Veto.init()
+veto = await Veto.init(VetoOptions(
+    api_key="veto_abc123...",
+    base_url="https://api.runveto.com",
+    mode="strict",
+    on_approval_required=my_handler,
+    approval_poll_interval=2.0,
+    approval_timeout=300.0,
+))
+```
+
+**Options:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `api_key` | `str` | `VETO_API_KEY` env | API key |
+| `base_url` | `str` | `"https://api.veto.dev"` | API base URL |
+| `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
+| `log_level` | `str` | `"info"` | Log level |
+| `session_id` | `str` | — | Session ID |
+| `agent_id` | `str` | — | Agent ID |
+| `timeout` | `int` | `30000` | API timeout in ms |
+| `retries` | `int` | `2` | Retry count |
+| `on_approval_required` | `callable` | — | Approval hook |
+| `approval_poll_interval` | `float` | `2.0` | Seconds between polls |
+| `approval_timeout` | `float` | `300.0` | Max seconds to wait |
+
+### `veto.wrap(tools)` / `veto.wrap_tool(tool)`
+
+### `veto.get_history_stats()` / `veto.clear_history()`
+
+### `veto.export_decisions(format="json")`
+
+Export decision history. Returns JSON or CSV (v0.6.0+).
+
+### Error handling
+
+```python
+from veto import ToolCallDeniedError
+from veto.cloud.client import ApprovalTimeoutError
+```
+
+### Cloud client
+
+```python
+from veto.cloud.client import VetoCloudClient, VetoCloudConfig
+
+client = VetoCloudClient(config=VetoCloudConfig(api_key=..., base_url=..., timeout=..., retries=...))
+
+await client.validate(tool_name, arguments, context?)
+await client.poll_approval(approval_id, options?)
+await client.fetch_policy(tool_name)
+client.log_decision(request)
+await client.register_tools(tools)
+```
+
+### Approval preferences
+
+```python
+veto.set_approval_preference("read_file", "approve_all")
+veto.set_approval_preference("delete_database", "deny_all")
+veto.get_approval_preference("read_file")
+veto.clear_approval_preferences("read_file")
+veto.clear_approval_preferences()
+```
+
+### Framework integrations
+
+| Framework | Import |
+|-----------|--------|
+| LangChain | `from veto.integrations.langchain import VetoMiddleware, veto_wrap_tool_call, create_veto_tool_node, VetoCallbackHandler` |
+| browser-use | `from veto.integrations.browser_use import wrap_browser_use, DEFAULT_VALIDATED_ACTIONS` |
+
+---
+
+## CLI
+
+### `veto init`
+
+Scaffolds `veto/` directory with config and default rules.
+
+```bash
+npx veto init
+npx veto init --force
+```
+
+### `veto compile`
+
+Compile natural language to YAML rules using an LLM at build time.
+
+```bash
+veto compile --input "Block emails outside company.com" --output ./veto/rules/email.yaml
+veto compile --file policies.txt --output ./veto/rules/ --provider anthropic
+```
+
+| Flag | Description |
+|------|-------------|
+| `--input <text>` | Inline policy description |
+| `--file <path>` | File with policy descriptions |
+| `--output <path>` | Output YAML file or directory |
+| `--provider <name>` | `openai`, `anthropic`, `gemini`, `openrouter` |
+| `--model <name>` | Model identifier |
+
+### `veto learn`
+
+Observe tool calls, auto-generate allowlist policies.
+
+```bash
+veto learn --runs 10
+veto learn --duration 30m --output ./veto/rules/learned.yaml
+```
+
+Reads JSON tool calls from stdin, generates constraints (number ranges, string enums, required fields, array bounds).
+
+### `veto test`
+
+Adversarial gap finder. Exit code 1 on critical gaps (CI-friendly).
+
+```bash
+veto test
+veto test --policy ./veto/rules --format json
+```
+
+---
+
+## LangChain Integration
+
+Three patterns: Middleware (recommended), ToolNode wrapper, Callback handler.
+
+### Middleware
+
+**TypeScript:**
+
+```typescript
+import { Veto } from 'veto-sdk';
+import { createVetoLangChainMiddleware } from 'veto-sdk/integrations/langchain';
+
+const veto = await Veto.init();
+const middleware = createVetoLangChainMiddleware(veto);
+const agent = createAgent({ tools: myTools, middleware: [middleware] });
+```
+
+**Python:**
+
+```python
+from veto import Veto
+from veto.integrations.langchain import VetoMiddleware
+
+veto = await Veto.init()
+middleware = VetoMiddleware(veto)
+agent = create_agent(tools=my_tools, middleware=[middleware])
+```
+
+**Options:** `onAllow`/`on_allow`, `onDeny`/`on_deny`, `throwOnDeny`/`throw_on_deny` (default: false).
+
+Denied calls return a `ToolMessage` with `"Tool call denied by Veto: <reason>"` by default. Set `throwOnDeny` to throw `ToolCallDeniedError` instead.
+
+### LangGraph ToolNode
+
+```typescript
+import { createVetoToolNode } from 'veto-sdk/integrations/langchain';
+const safeToolNode = createVetoToolNode(veto, toolNode);
+```
+
+```python
+from veto.integrations.langchain import create_veto_tool_node
+safe_tool_node = create_veto_tool_node(veto, tool_node)
+```
+
+Validates all calls in a batch before executing. Partial denial: allowed calls execute, denied return ToolMessages.
+
+### Callback handler
+
+Observational only — cannot block execution. For audit logging.
+
+```typescript
+import { createVetoCallbackHandler } from 'veto-sdk/integrations/langchain';
+const handler = createVetoCallbackHandler({ onToolStart, onToolEnd, onToolError });
+```
+
+```python
+from veto.integrations.langchain import VetoCallbackHandler
+handler = VetoCallbackHandler(on_tool_start=..., on_tool_end=..., on_tool_error=...)
+```
+
+---
+
+## Vercel AI SDK Integration (TypeScript only)
+
+Middleware for `generateText` and `streamText`.
+
+```typescript
+import { createVetoMiddleware } from 'veto-sdk/integrations/vercel-ai';
+import { generateText, wrapLanguageModel } from 'ai';
+
+const middleware = createVetoMiddleware(veto);
+const model = wrapLanguageModel({ model: openai('gpt-4o'), middleware });
+```
+
+**Options:** `onAllow`, `onDeny`, `throwOnDeny` (default: false).
+
+- `generateText`: denied calls always throw `ToolCallDeniedError`
+- `streamText`: denied calls silently dropped (or throw with `throwOnDeny: true`)
+
+Stream mode buffers tool-input chunks until tool-call boundary, then validates before flushing.
+
+---
+
+## Browser-Use Integration
+
+Wraps browser-use Controller (TS) / Tools (Python) to validate actions.
+
+**TypeScript:**
+
+```typescript
+import { wrapBrowserUse } from 'veto-sdk/integrations/browser-use';
+const controller = await wrapBrowserUse(veto);
+```
+
+Default actions: `go_to_url`, `click_element`, `input_text`, `extract_page_content`, `scroll`, `done`, `tab`.
+
+**Python:**
+
+```python
+from veto.integrations.browser_use import wrap_browser_use
+tools = await wrap_browser_use(veto)
+```
+
+Default actions: `navigate`, `search`, `click`, `input`, `extract`, `scroll`, `done`.
+
+**Options:** `validatedActions`/`validated_actions`, `onAllow`/`on_allow`, `onDeny`/`on_deny`.
+
+Denied actions return `ActionResult({ error: "Action blocked by Veto: <reason>" })` — never throw.
+
+---
+
+## MCP Integration
+
+Veto supports MCP tool definitions natively. `veto.wrap()` auto-detects MCP format.
+
+```typescript
+const wrappedTools = veto.wrap(mcpToolDefinitions);
+```
+
+MCP tools use `inputSchema` instead of `parameters` — converted automatically. Manual adapter:
+
+```typescript
+import { fromMCP, isMCPTool } from 'veto-sdk/providers';
+```
+
+---
+
+## YAML Rule Format
+
+```yaml
+rules:
+  - id: unique-rule-id           # [Required] Unique identifier
+    name: Human readable name    # [Required] Descriptive name
+    enabled: true                # [Optional] Default: true
+    severity: high               # [Optional] critical, high, medium, low, info
+    action: block                # [Required] block, warn, log, allow, require_approval
+    tools:                       # [Optional] If omitted, applies to ALL tools
+      - make_payment
+    conditions:                  # [Optional] AND logic
+      - field: arguments.amount
+        operator: greater_than
+        value: 1000
+    condition_groups:            # [Optional] OR-of-ANDs logic
+      - - field: arguments.amount
+          operator: greater_than
+          value: 10000
+      - - field: arguments.currency
+          operator: not_in
+          value: ["USD", "EUR"]
+        - field: arguments.amount
+          operator: greater_than
+          value: 1000
+    description: "Natural language guidance for LLM validation"
+```
+
+### Fields
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `id` | Yes | — | Unique identifier |
+| `name` | Yes | — | Human-readable name |
+| `enabled` | No | `true` | Whether the rule is active |
+| `severity` | No | `medium` | `critical`, `high`, `medium`, `low`, `info` |
+| `action` | Yes | — | `block`, `warn`, `log`, `allow`, `require_approval` |
+| `tools` | No | All tools | Tool names this rule applies to |
+| `conditions` | No | — | Static constraints (AND) |
+| `condition_groups` | No | — | Compound constraints (OR-of-ANDs) |
+| `description` | No | — | Natural language guidance for LLM |
+
+### Condition operators
+
+| Operator | Type | Description |
+|----------|------|-------------|
+| `equals` | any | Exact match |
+| `not_equals` | any | Must not equal |
+| `contains` | string | Substring match |
+| `not_contains` | string | Must NOT contain |
+| `starts_with` | string | Prefix match |
+| `ends_with` | string | Suffix match |
+| `matches` | string | Regex (max 256 chars, ReDoS-safe) |
+| `in` | string/number | Value in allowlist |
+| `not_in` | string/number | Value NOT in denylist |
+| `greater_than` | number | Numeric > |
+| `less_than` | number | Numeric < |
+
+### Condition groups (OR logic)
+
+Use `condition_groups` instead of `conditions` for compound logic. Each group is AND-ed internally, groups are OR-ed together. Only one of `conditions` or `condition_groups` per rule.
+
+---
+
+## Validation Modes
+
+Five validation modes:
+
+| Mode | Where | Config |
+|------|-------|--------|
+| **Local** (default) | In-process | No config needed |
+| **Cloud** | Veto Cloud API | `validation.mode: "cloud"` + `apiKey` |
+| **API** | Self-hosted endpoint | `validation.mode: "api"` + `api.url` |
+| **Custom** | Direct LLM call | `validation.mode: "custom"` + `custom.provider` |
+| **Kernel** | Local Ollama | `validation.mode: "kernel"` + `kernel.url` |
+
+### Custom mode providers
+
+| Provider | Models | Env variable |
+|----------|--------|-------------|
+| `openai` | `gpt-4o`, `gpt-4o-mini` | `OPENAI_API_KEY` |
+| `anthropic` | `claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY` |
+| `gemini` | `gemini-3-flash-preview` | `GOOGLE_API_KEY` |
+
+---
+
+## Constraints Reference
+
+### Policy constraints (dashboard / API)
+
+**Number:** `minimum`, `maximum`, `greaterThan`, `lessThan`, `greaterThanOrEqual`, `lessThanOrEqual`
+**String:** `enum`, `regex` (max 256 chars), `minLength`, `maxLength`
+**Array:** `minItems`, `maxItems`
+**Presence:** `required`, `notNull`
+
+NaN and Infinity always fail number constraints. Regex patterns checked for ReDoS safety.
+
+### Python naming
+
+`notNull` → `not_null`, `greaterThan` → `greater_than`, `minLength` → `min_length`, etc.
+
+---
+
+## Budget Constraints
+
+Per-session cost circuit breaker.
+
+```yaml
+budget:
+  max: 50
+  currency: USD
+  window: session
+
+costs:
+  send_email: 0
+  api_call: 0.01
+  purchase: args.amount    # Dynamic — reads from tool arguments
+```
+
+```typescript
+import { BudgetExceededError } from 'veto-sdk';
+
+// error.spent, error.limit, error.remaining, error.toolName, error.toolCost
+```
+
+Budget checks run before policy validation.
+
+---
+
+## Server API
+
+These endpoints are used internally by the SDK when running in cloud or self-hosted mode. You typically don't call them directly — the SDK handles all communication.
+
+### POST /v1/validate
+
+Core validation endpoint.
+
+```
+POST /v1/tools/validate
+```
+
+**Headers:** `X-Veto-API-Key` (required), `Content-Type: application/json`
+
+**Body:**
+
+```json
+{
+  "tool_name": "send_email",
+  "arguments": { "to": "user@example.com", "subject": "Hello" },
+  "context": { "session_id": "sess_abc", "call_id": "call_123" }
+}
+```
+
+**Response decisions:** `allow`, `deny`, `require_approval`
+
+**Denied response includes:** `reason`, `failed_constraints` array, `latency_ms`
+**Approval response includes:** `approval_id`, `reason`, `latency_ms`
+
+---
+
+### Policies API
+
+All endpoints: `X-Veto-API-Key` or Bearer JWT + `X-Organization-Id`.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/policies` | GET | List all policies |
+| `/v1/policies/:toolName` | GET | Get policy for a tool |
+| `/v1/policies` | POST | Create policy |
+| `/v1/policies/:toolName` | PUT | Update policy |
+| `/v1/policies/:toolName` | DELETE | Delete policy |
+| `/v1/policies/:toolName/activate` | POST | Activate |
+| `/v1/policies/:toolName/deactivate` | POST | Deactivate |
+| `/v1/policies/:toolName/validate` | POST | Dry-run quality check |
+
+**Policy modes:** `deterministic` (constraints) or `llm` (natural language + exceptions).
+
+**Constraint fields:** `argumentName`, `enabled`, `required`, `notNull`, `minimum`, `maximum`, `greaterThan`, `lessThan`, `minLength`, `maxLength`, `enum`, `regex`, `minItems`, `maxItems`.
+
+**LLM config fields:** `description`, `exceptions`, `argumentInstructions`, `preferredModel`.
+
+**Session constraints:** `maxCalls`, `cumulativeLimits` (array of `{ argumentName, maxValue }`).
+
+---
+
+### Decisions API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/decisions` | GET | List with pagination and filters |
+| `/v1/decisions/stats` | GET | Aggregated stats over N days |
+| `/v1/decisions/:id` | GET | Single decision by ID |
+| `/v1/decisions` | POST | Log client-side decision |
+
+**GET /v1/decisions query params:** `limit` (1-100, default 50), `offset`, `projectId`, `toolName`, `decision` (allow/deny), `startDate`, `endDate`.
+
+**GET /v1/decisions/stats query params:** `days` (1-90, default 7), `projectId`.
+
+**Stats response:** `{ period: { days }, summary: { total, allowed, denied, deterministic, llm }, breakdown: [...] }`
+
+**POST /v1/decisions:** Rate limited at 120 req/60s. Requires project-scoped API key.
+
+---
+
+### Approvals API
+
+HITL requires **Team** plan or above.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/approvals/pending` | GET | List pending approvals |
+| `/v1/approvals` | POST | Create approval manually |
+| `/v1/approvals/:id` | GET | Poll approval status |
+| `/v1/approvals/:id/resolve` | POST | Approve or deny |
+
+**POST /v1/approvals body:** `{ decisionId?, toolName, arguments?, expiresInSeconds? }` (60-86400, default 3600).
+
+**POST /v1/approvals/:id/resolve body:** `{ action: "approve" | "deny", resolvedBy: "user@company.com" }`.
+
+**Resolve errors:** 404 (not found), 410 (expired), 400 (already resolved).
+
+**SDK flow:** validate → `require_approval` → fire `onApprovalRequired` hook → poll every 2s → resolved or timeout (5 min default) → `ApprovalTimeoutError`.

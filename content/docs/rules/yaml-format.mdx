@@ -13,7 +13,7 @@ rules:
     name: Human readable name    # [Required] Descriptive name for logging
     enabled: true                # [Optional] Default: true
     severity: high               # [Optional] critical, high, medium, low, info
-    action: block                # [Required] block, warn, log, allow
+    action: block                # [Required] block, warn, log, allow, require_approval
 
     # Scope: which tools does this rule apply to?
     tools:                       # [Optional] List of tool names
@@ -25,6 +25,19 @@ rules:
       - field: arguments.amount  # Dot notation for nested args
         operator: greater_than   # See operators table below
         value: 1000
+
+    # Condition groups (optional):
+    # OR-of-ANDs — use instead of `conditions` for compound logic
+    condition_groups:
+      - - field: arguments.amount
+          operator: greater_than
+          value: 10000
+      - - field: arguments.currency
+          operator: not_in
+          value: ["USD", "EUR"]
+        - field: arguments.amount
+          operator: greater_than
+          value: 1000
 
     # Description (optional):
     # Natural language guidance for the validation LLM
@@ -39,9 +52,10 @@ rules:
 | `name` | Yes | — | Human-readable name for logging |
 | `enabled` | No | `true` | Whether the rule is active |
 | `severity` | No | `medium` | `critical`, `high`, `medium`, `low`, `info` |
-| `action` | Yes | — | `block`, `warn`, `log`, `allow` |
+| `action` | Yes | — | `block`, `warn`, `log`, `allow`, `require_approval` |
 | `tools` | No | All tools | List of tool names this rule applies to |
-| `conditions` | No | — | Static constraint checks |
+| `conditions` | No | — | Static constraint checks (AND logic) |
+| `condition_groups` | No | — | Compound constraint checks (OR-of-ANDs logic) |
 | `description` | No | — | Natural language guidance for LLM validation |
 
 ## Condition operators
@@ -59,6 +73,38 @@ rules:
 | `not_in` | string/number | Value NOT in denylist | `value: ["admin", "root"]` |
 | `greater_than` | number | Numeric > comparison | `value: 1000` |
 | `less_than` | number | Numeric < comparison | `value: 0` |
+
+## Condition groups (OR logic)
+
+When you need compound logic beyond simple AND, use `condition_groups` instead of `conditions`. Each group is an array of conditions joined with AND, and groups are joined with OR.
+
+Only use one of `conditions` or `condition_groups` per rule. If both are set, `conditions` takes precedence.
+
+```yaml
+rules:
+  - id: restrict-high-risk-transfers
+    name: Block high-risk financial transfers
+    action: block
+    tools:
+      - transfer_funds
+    condition_groups:
+      # Group 1: Large transfers to any destination
+      - - field: arguments.amount
+          operator: greater_than
+          value: 50000
+
+      # Group 2: Any transfer to a non-approved currency AND amount > 1000
+      - - field: arguments.currency
+          operator: not_in
+          value: ["USD", "EUR", "GBP"]
+        - field: arguments.amount
+          operator: greater_than
+          value: 1000
+```
+
+This rule triggers if **either** group matches:
+- Amount exceeds 50,000 (any currency), **OR**
+- Amount exceeds 1,000 in a non-approved currency
 
 ## Rule matching logic
 
