@@ -20,7 +20,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         footer: (
           <div className="flex flex-col gap-2 border-t border-fd-border px-4 py-4 text-xs text-fd-muted-foreground">
             <div className="flex items-center gap-3">
-              <a href="https://github.com/vetoai" target="_blank" rel="noopener noreferrer" className="hover:text-fd-foreground transition-colors">
+              <a href="https://github.com/VulnZap/veto" target="_blank" rel="noopener noreferrer" className="hover:text-fd-foreground transition-colors">
                 GitHub
               </a>
               <a href="https://runveto.com" target="_blank" rel="noopener noreferrer" className="hover:text-fd-foreground transition-colors">
