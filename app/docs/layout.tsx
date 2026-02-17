@@ -8,9 +8,9 @@ export default function Layout({ children }: { children: ReactNode }) {
       tree={source.pageTree}
       nav={{
         title: (
-          <span className="flex items-center gap-1.5">
-            <img src="/veto-darkmode.png" alt="Veto" className="h-5 hidden dark:block" />
-            <img src="/veto-lightmode-full.png" alt="Veto" className="h-5 dark:hidden" />
+          <span className="flex items-center gap-2">
+            <img src="/veto-darkmode-icon.png" alt="Veto" className="h-5 w-5 hidden dark:block" />
+            <img src="/veto-lightmode-icon.png" alt="Veto" className="h-5 w-5 dark:hidden" />
             <span className="text-fd-muted-foreground text-sm font-normal">/docs</span>
           </span>
         ),
