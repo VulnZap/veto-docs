@@ -57,7 +57,7 @@ Every tool call is now validated against your rules. The agent code doesn't chan
 ## Features
 
 - **Local-first** — works out of the box with YAML rules, no API key or account needed
-- **Provider agnostic** — OpenAI, Anthropic, Google, LangChain, Vercel AI SDK, MCP, browser-use
+- **Provider agnostic** — OpenAI, Anthropic, Google, [LangChain](/docs/integrations/langchain), [Vercel AI SDK](/docs/integrations/vercel-ai), MCP, [browser-use](/docs/integrations/browser-use)
 - **Budget constraints** — per-session cost circuit breaker for tool calls
 - **CLI tooling** — `veto compile` (NL → rules), `veto learn` (observe → generate), `veto test` (gap analysis)
 - **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
@@ -75,3 +75,6 @@ Every tool call is now validated against your rules. The agent code doesn't chan
 - [CLI Reference](/docs/sdk/cli) — compile, learn, test commands
 - [TypeScript SDK](/docs/sdk/typescript) — full API reference
 - [Python SDK](/docs/sdk/python) — full API reference
+- [LangChain Integration](/docs/integrations/langchain) — middleware, ToolNode, callbacks
+- [Vercel AI SDK Integration](/docs/integrations/vercel-ai) — middleware with streaming
+- [Browser-Use Integration](/docs/integrations/browser-use) — browser automation guardrails

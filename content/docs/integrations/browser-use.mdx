@@ -1,0 +1,160 @@
+---
+title: Browser-Use Integration
+description: Validate browser automation actions with Veto before they execute.
+---
+
+Veto wraps the [browser-use](https://github.com/browser-use/browser-use) controller to validate browser actions before they execute. Dangerous actions (navigating to URLs, clicking elements, entering text) are checked against your policies.
+
+## Installation
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```bash
+npm install veto-sdk browser-use-node
+```
+</Tab>
+<Tab value="Python">
+```bash
+pip install veto browser-use
+```
+</Tab>
+</Tabs>
+
+## Quick start
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { Veto } from 'veto-sdk';
+import { wrapBrowserUse } from 'veto-sdk/integrations/browser-use';
+
+const veto = await Veto.init();
+const controller = await wrapBrowserUse(veto);
+
+// Use `controller` as a drop-in replacement for browser-use's Controller
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto import Veto
+from veto.integrations.browser_use import wrap_browser_use
+
+veto = await Veto.init()
+tools = await wrap_browser_use(veto)
+
+# Use `tools` as a drop-in replacement for browser-use's Tools
+```
+</Tab>
+</Tabs>
+
+## Default validated actions
+
+Actions not in this set bypass validation entirely and execute normally.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+| Action | Description |
+|--------|-------------|
+| `go_to_url` | Navigate to a URL |
+| `click_element` | Click a page element |
+| `input_text` | Enter text into a field |
+| `extract_page_content` | Extract page content |
+| `scroll` | Scroll the page |
+| `done` | Mark task as complete |
+| `tab` | Switch browser tabs |
+</Tab>
+<Tab value="Python">
+| Action | Description |
+|--------|-------------|
+| `navigate` | Navigate to a URL |
+| `search` | Perform a search |
+| `click` | Click a page element |
+| `input` | Enter text into a field |
+| `extract` | Extract page content |
+| `scroll` | Scroll the page |
+| `done` | Mark task as complete |
+</Tab>
+</Tabs>
+
+Action names differ between TypeScript (`browser-use-node`) and Python (`browser-use`) because the underlying libraries use different naming conventions.
+
+## Options
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `validatedActions` | `Set<string>` | `DEFAULT_VALIDATED_ACTIONS` | Actions to validate |
+| `onAllow` | `(actionName, params) => void` | — | Called when an action passes |
+| `onDeny` | `(actionName, params, reason) => void` | — | Called when an action is denied |
+</Tab>
+<Tab value="Python">
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `validated_actions` | `set[str]` | `DEFAULT_VALIDATED_ACTIONS` | Actions to validate |
+| `on_allow` | `Callable` | `None` | Called when an action passes |
+| `on_deny` | `Callable` | `None` | Called when an action is denied |
+</Tab>
+</Tabs>
+
+## How it works
+
+`wrapBrowserUse` / `wrap_browser_use` creates a subclass of the browser-use Controller (TS) or Tools (Python) class that overrides the `act()` method:
+
+1. Parse the action name and parameters from the incoming action object
+2. If the action is in `validatedActions`, validate via `veto.validateToolCall()`
+3. **Allowed**: execute the original action
+4. **Denied**: return an `ActionResult` with an error message — the agent sees the denial and can adapt
+5. Actions not in `validatedActions` pass through to the original `act()` without validation
+
+Denied actions never throw. They return:
+
+```
+ActionResult({ error: "Action blocked by Veto: <reason>" })
+```
+
+When using Veto Cloud, the wrapper auto-registers browser action schemas with the server so you can configure policies from the dashboard.
+
+## YAML rules for browser actions
+
+```yaml
+rules:
+  - id: block-dangerous-urls
+    name: Block navigation to dangerous URLs
+    action: block
+    tools:
+      - go_to_url       # TypeScript
+      # - navigate       # Python
+    conditions:
+      - field: arguments.url
+        operator: matches
+        value: "^https?://(.*\\.)?(malware|phishing|darkweb)\\."
+
+  - id: block-password-input
+    name: Block typing passwords
+    action: block
+    tools:
+      - input_text       # TypeScript
+      # - input           # Python
+    conditions:
+      - field: arguments.text
+        operator: matches
+        value: "(?i)(password|secret|token|api.?key)"
+```
+
+## Exports
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { wrapBrowserUse, DEFAULT_VALIDATED_ACTIONS } from 'veto-sdk/integrations/browser-use';
+
+import type { WrapBrowserUseOptions } from 'veto-sdk/integrations/browser-use';
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto.integrations.browser_use import wrap_browser_use, DEFAULT_VALIDATED_ACTIONS
+```
+</Tab>
+</Tabs>

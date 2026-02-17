@@ -1,6 +1,6 @@
 ---
 title: Python SDK
-description: Full API reference for the Veto Python SDK (v0.4.0).
+description: Full API reference for the Veto Python SDK (v0.7.0).
 ---
 
 ## Installation
@@ -276,6 +276,28 @@ await client.register_tools([
     ),
 ])
 ```
+
+## `veto.export_decisions(options?)`
+
+Export the local decision history as JSON or CSV. Added in v0.6.0.
+
+```python
+json_data = veto.export_decisions()  # JSON by default
+csv_data = veto.export_decisions(format="csv")
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `format` | `str` | `"json"` | `"json"` or `"csv"` |
+
+Each record includes normalized audit fields: `timestamp`, `tool_name`, `arguments`, `policy_version`, `rule_id`, `decision`, `reason`.
+
+## Framework integrations
+
+| Framework | Import | Guide |
+|-----------|--------|-------|
+| LangChain | `veto.integrations.langchain` | [LangChain Integration](/docs/integrations/langchain) |
+| browser-use | `veto.integrations.browser_use` | [Browser-Use Integration](/docs/integrations/browser-use) |
 
 ## CLI commands
 

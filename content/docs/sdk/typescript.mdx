@@ -1,6 +1,6 @@
 ---
 title: TypeScript SDK
-description: Full API reference for the Veto TypeScript SDK (v1.5.0).
+description: Full API reference for the Veto TypeScript SDK (v1.7.0).
 ---
 
 ## Installation
@@ -316,6 +316,34 @@ await client.registerTools([{
 }]);
 ```
 
+## `veto.exportDecisions(options?)`
+
+Export the local decision history as JSON or CSV. Added in v1.6.0.
+
+```typescript
+const json = veto.exportDecisions(); // JSON by default
+const csv = veto.exportDecisions({ format: 'csv' });
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `format` | `"json" \| "csv"` | `"json"` | Output format |
+
+Each record includes normalized audit fields: `timestamp`, `tool_name`, `arguments`, `policy_version`, `rule_id`, `decision`, `reason`.
+
+## Framework integrations
+
+The SDK provides deep integrations with popular AI frameworks. Each integration intercepts tool calls at the framework level — no changes to your agent code.
+
+| Framework | Import | Guide |
+|-----------|--------|-------|
+| LangChain | `veto-sdk/integrations/langchain` | [LangChain Integration](/docs/integrations/langchain) |
+| Vercel AI SDK | `veto-sdk/integrations/vercel-ai` | [Vercel AI SDK Integration](/docs/integrations/vercel-ai) |
+| browser-use | `veto-sdk/integrations/browser-use` | [Browser-Use Integration](/docs/integrations/browser-use) |
+| MCP | `veto-sdk/providers` | [MCP Integration](/docs/integrations/mcp) |
+
 ## Provider adapters
 
 The SDK includes adapters that convert tool definitions between formats:
@@ -349,3 +377,6 @@ if (isMCPTool(tool)) {
 | `veto-sdk/custom` | Direct LLM provider integration |
 | `veto-sdk/compiler` | Rule compiler utilities |
 | `veto-sdk/benchmark` | Performance benchmarking |
+| `veto-sdk/integrations/langchain` | LangChain middleware, ToolNode wrapper, callback handler |
+| `veto-sdk/integrations/vercel-ai` | Vercel AI SDK middleware with streaming support |
+| `veto-sdk/integrations/browser-use` | Browser-use controller wrapper |

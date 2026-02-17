@@ -1,0 +1,236 @@
+---
+title: LangChain Integration
+description: Use Veto with LangChain agents — middleware, LangGraph ToolNode, and callback handler.
+---
+
+Veto integrates with LangChain at three levels. Pick the pattern that matches your setup.
+
+| Pattern | Best for | Blocks tool calls? |
+|---------|----------|-------------------|
+| **Middleware** (recommended) | `createAgent` / LangGraph | Yes |
+| **ToolNode wrapper** | Raw `StateGraph` with `ToolNode` | Yes (partial denial supported) |
+| **Callback handler** | Audit logging only | No |
+
+## Installation
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```bash
+npm install veto-sdk @langchain/core
+```
+</Tab>
+<Tab value="Python">
+```bash
+pip install veto langchain-core
+```
+</Tab>
+</Tabs>
+
+## Middleware
+
+The middleware intercepts every tool call before execution. Pass it to `createAgent` or any LangGraph workflow that supports middleware.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { Veto } from 'veto-sdk';
+import { createVetoLangChainMiddleware } from 'veto-sdk/integrations/langchain';
+import { createAgent } from '@langchain/core/agents';
+
+const veto = await Veto.init();
+const middleware = createVetoLangChainMiddleware(veto);
+
+const agent = createAgent({
+  tools: myTools,
+  middleware: [middleware],
+});
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto import Veto
+from veto.integrations.langchain import VetoMiddleware
+
+veto = await Veto.init()
+middleware = VetoMiddleware(veto)
+
+agent = create_agent(
+    tools=my_tools,
+    middleware=[middleware],
+)
+```
+
+A functional alternative is also available:
+
+```python
+from veto.integrations.langchain import veto_wrap_tool_call
+
+wrap_fn = veto_wrap_tool_call(veto)
+agent = create_agent(
+    tools=my_tools,
+    middleware=[{"name": "veto", "wrapToolCall": wrap_fn}],
+)
+```
+</Tab>
+</Tabs>
+
+### Middleware options
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `onAllow` | `(toolName, args) => void` | — | Called when a tool call passes validation |
+| `onDeny` | `(toolName, args, reason) => void` | — | Called when a tool call is denied |
+| `throwOnDeny` | `boolean` | `false` | Throw `ToolCallDeniedError` instead of returning a `ToolMessage` |
+</Tab>
+<Tab value="Python">
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `on_allow` | `Callable` | `None` | Called when a tool call passes validation |
+| `on_deny` | `Callable` | `None` | Called when a tool call is denied |
+| `throw_on_deny` | `bool` | `False` | Raise `ToolCallDeniedError` instead of returning a `ToolMessage` |
+</Tab>
+</Tabs>
+
+### How denial works
+
+By default, denied tool calls return a `ToolMessage` with the denial reason:
+
+```
+Tool call denied by Veto: <reason>
+```
+
+The agent sees the denial as a normal tool response and can adapt. Set `throwOnDeny` / `throw_on_deny` to `true` to throw a `ToolCallDeniedError` instead — useful when you want to halt the agent on any denied call.
+
+If `@langchain/core` / `langchain_core` is not installed, the middleware falls back to returning a plain dict with `content` and `tool_call_id` fields.
+
+## LangGraph ToolNode
+
+For raw `StateGraph` workflows that use a `ToolNode` directly, wrap it with `createVetoToolNode` / `create_veto_tool_node`. This validates all tool calls in the batch before executing any of them.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { createVetoToolNode } from 'veto-sdk/integrations/langchain';
+import { ToolNode } from '@langchain/langgraph/prebuilt';
+
+const toolNode = new ToolNode(myTools);
+const safeToolNode = createVetoToolNode(veto, toolNode);
+
+const graph = new StateGraph(...)
+  .addNode("tools", safeToolNode)
+  // ...
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto.integrations.langchain import create_veto_tool_node
+from langgraph.prebuilt import ToolNode
+
+tool_node = ToolNode(my_tools)
+safe_tool_node = create_veto_tool_node(veto, tool_node)
+
+graph = StateGraph(...)
+graph.add_node("tools", safe_tool_node)
+```
+</Tab>
+</Tabs>
+
+### ToolNode options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `onAllow` / `on_allow` | callback | Called per-allowed tool call |
+| `onDeny` / `on_deny` | callback | Called per-denied tool call |
+
+No `throwOnDeny` option — denied calls always return `ToolMessage` objects.
+
+### Partial denial
+
+When a batch contains multiple tool calls, the ToolNode wrapper validates all of them first:
+
+- **All denied**: Returns denial `ToolMessage` objects without calling the underlying `ToolNode`
+- **All allowed**: Passes through to `ToolNode` normally
+- **Mixed**: Strips denied calls from the message, executes allowed calls via `ToolNode`, then returns both denial messages and execution results
+
+## Callback handler
+
+The callback handler is observational — it cannot block tool execution. Use it for audit logging alongside other validation methods.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { createVetoCallbackHandler } from 'veto-sdk/integrations/langchain';
+
+const handler = createVetoCallbackHandler({
+  onToolStart: (toolName, input) => {
+    console.log(`Tool started: ${toolName}`);
+  },
+  onToolEnd: (toolName, output) => {
+    console.log(`Tool finished: ${toolName}`);
+  },
+  onToolError: (toolName, error) => {
+    console.error(`Tool error: ${toolName}`, error);
+  },
+});
+
+const result = await agent.invoke(input, { callbacks: [handler] });
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto.integrations.langchain import VetoCallbackHandler
+
+handler = VetoCallbackHandler(
+    on_tool_start=lambda name, input: print(f"Tool started: {name}"),
+    on_tool_end=lambda name, output: print(f"Tool finished: {name}"),
+    on_tool_error=lambda name, error: print(f"Tool error: {name}: {error}"),
+)
+
+result = await agent.ainvoke(input, config={"callbacks": [handler]})
+```
+
+The Python handler inherits from `langchain_core.callbacks.BaseCallbackHandler` when available, making it compatible with LangChain's `CallbackManager`. Callbacks must be synchronous (async is not supported for callback handlers).
+</Tab>
+</Tabs>
+
+### Callback options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `onToolStart` / `on_tool_start` | callback | Called when a tool starts executing |
+| `onToolEnd` / `on_tool_end` | callback | Called when a tool finishes |
+| `onToolError` / `on_tool_error` | callback | Called when a tool throws an error |
+
+All callbacks are optional.
+
+## Exports
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import {
+  createVetoLangChainMiddleware,
+  createVetoToolNode,
+  createVetoCallbackHandler,
+} from 'veto-sdk/integrations/langchain';
+
+import type {
+  VetoLangChainMiddlewareOptions,
+  VetoToolNodeOptions,
+  VetoCallbackOptions,
+} from 'veto-sdk/integrations/langchain';
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto.integrations.langchain import (
+    VetoMiddleware,
+    veto_wrap_tool_call,
+    create_veto_tool_node,
+    VetoCallbackHandler,
+)
+```
+</Tab>
+</Tabs>

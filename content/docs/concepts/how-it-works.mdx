@@ -147,6 +147,69 @@ const veto = await Veto.init({
 });
 ```
 
+## Session-aware validation
+
+Veto can track per-session state — call counts, cumulative argument values — and enforce constraints that span multiple tool calls within a session.
+
+### Enabling sessions
+
+Pass a `sessionId` when initializing the SDK or in the validation context:
+
+```typescript
+const veto = await Veto.init({
+  sessionId: "session_abc123",
+});
+```
+
+Session constraints are always evaluated server-side since they require centralized state tracking.
+
+### Constraint types
+
+| Constraint | Description | Example |
+|-----------|-------------|---------|
+| `maxCalls` | Maximum calls to a tool per session | `maxCalls: 5` — block after 5 calls to `delete_record` |
+| `cumulativeLimits` | Running sum of a numeric argument | `argumentName: "amount", maxValue: 10000` — block when total transfer amount exceeds 10K |
+
+### Session state
+
+The server tracks state per session:
+
+```json
+{
+  "callCounts": {
+    "transfer_funds": 3,
+    "delete_record": 1
+  },
+  "cumulativeValues": {
+    "transfer_funds": {
+      "amount": 4500
+    }
+  }
+}
+```
+
+`callCounts` increments on every validated call. `cumulativeValues` accumulates non-negative, finite numeric argument values. Non-numeric or negative values are ignored for cumulative tracking.
+
+### How constraints are checked
+
+- **maxCalls**: Checked before the current call is recorded. Fails if `callCounts[toolName] >= maxCalls`.
+- **cumulativeLimits**: Checked against `currentSum + incomingValue > maxValue`. Returns the first failing constraint.
+
+Configure session constraints via the [Policies API](/docs/api-reference/policies) using the `sessionConstraints` field.
+
+## Plan limits
+
+| Feature | Free | Team | Business | Enterprise |
+|---------|------|------|----------|------------|
+| Decisions/month | 10,000 | 100,000 | 1,000,000 | Unlimited |
+| Agents | 1 | 10 | Unlimited | Unlimited |
+| Log retention | 7 days | 30 days | 90 days | Unlimited |
+| Dashboard | — | Yes | Yes | Yes |
+| Human-in-the-loop | — | Yes | Yes | Yes |
+| Analytics | — | — | Yes | Yes |
+| Compliance exports | — | — | Yes | Yes |
+| SSO | — | — | Yes | Yes |
+
 ## Offline validation modes
 
 Besides Veto Cloud, the SDK supports three offline modes that don't require the Veto server:
