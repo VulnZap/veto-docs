@@ -98,14 +98,17 @@ veto.clear_history()
 When a tool call is blocked, Veto raises a `ToolCallDeniedError`:
 
 ```python
-from veto import ToolCallDeniedError
+from veto.core.interceptor import ToolCallDeniedError
 
 try:
     await wrapped_tool.ainvoke(args)
 except ToolCallDeniedError as e:
     print(e.tool_name)   # "transfer_funds"
-    print(e.call_id)     # "call_abc123"
+    print(e.reason)      # "Amount 5000 exceeds limit of 1000"
+    print(e.call_id)     # "tc_abc123"
 ```
+
+See the [Error Handling Guide](/docs/guides/error-handling) for strategies on retry, graceful degradation, and framework-specific patterns (OpenAI, Anthropic, LangChain).
 
 When an approval poll times out, Veto raises an `ApprovalTimeoutError`:
 

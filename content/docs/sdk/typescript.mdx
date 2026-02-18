@@ -94,11 +94,14 @@ try {
   await wrappedTool.invoke(args);
 } catch (error) {
   if (error instanceof ToolCallDeniedError) {
-    console.log(error.message);  // "Tool call denied: limit-transfers"
-    console.log(error.ruleId);   // "limit-transfers"
+    console.log(error.toolName);  // "transfer_funds"
+    console.log(error.reason);    // "Amount 5000 exceeds limit of 1000"
+    console.log(error.callId);    // "tc_abc123"
   }
 }
 ```
+
+See the [Error Handling Guide](/docs/guides/error-handling) for strategies on retry, graceful degradation, and framework-specific patterns (OpenAI, Anthropic, LangChain).
 
 When a budget limit is exceeded, Veto throws a `BudgetExceededError`:
 

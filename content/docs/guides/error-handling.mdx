@@ -1,0 +1,607 @@
+---
+title: Error Handling
+description: Handle denied tool calls gracefully — retry strategies, agent messaging, and framework-specific patterns.
+---
+
+When Veto blocks a tool call, it throws a `ToolCallDeniedError`. How your agent handles that error determines whether it retries, tells the user, or tries an alternative approach.
+
+## ToolCallDeniedError
+
+Every denied tool call produces a `ToolCallDeniedError` with these properties:
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+| Property | Type | Description |
+|----------|------|-------------|
+| `toolName` | `string` | Name of the blocked tool |
+| `callId` | `string` | Unique ID for this tool call |
+| `reason` | `string` | Why it was denied (e.g. "Amount 5000 exceeds limit of 1000") |
+| `validationResult` | `ValidationResult` | Full result with `decision`, `reason`, and `metadata` |
+| `message` | `string` | `"Tool call denied: {toolName} - {reason}"` |
+
+```typescript
+import { ToolCallDeniedError } from 'veto-sdk';
+
+try {
+  await wrappedTool.handler(args);
+} catch (error) {
+  if (error instanceof ToolCallDeniedError) {
+    error.toolName;          // "transfer_funds"
+    error.reason;            // "Amount 5000 exceeds limit of 1000"
+    error.callId;            // "tc_abc123"
+    error.validationResult;  // { decision: "deny", reason: "...", metadata: {...} }
+  }
+}
+```
+</Tab>
+<Tab value="Python">
+| Property | Type | Description |
+|----------|------|-------------|
+| `tool_name` | `str` | Name of the blocked tool |
+| `call_id` | `str` | Unique ID for this tool call |
+| `reason` | `str` | Why it was denied |
+| `validation_result` | `ValidationResult` | Full result with `decision`, `reason`, and `metadata` |
+
+```python
+from veto.core.interceptor import ToolCallDeniedError
+
+try:
+    await wrapped_tool.ainvoke(args)
+except ToolCallDeniedError as e:
+    e.tool_name          # "transfer_funds"
+    e.reason             # "Amount 5000 exceeds limit of 1000"
+    e.call_id            # "tc_abc123"
+    e.validation_result  # ValidationResult(decision="deny", reason="...", metadata={...})
+```
+</Tab>
+</Tabs>
+
+## Handling strategies
+
+There are three ways to handle a denied tool call:
+
+| Strategy | When to use | Example |
+|----------|-------------|---------|
+| **Feed back to the model** | Let the AI adapt its approach | Return denial as a tool result so the model retries with different arguments |
+| **Throw to the caller** | Hard stop on policy violations | Let the error propagate up and show the user an error message |
+| **Graceful degradation** | Best-effort execution | Catch the error, log it, and continue with a fallback |
+
+## OpenAI
+
+With the OpenAI SDK, catch the error in your tool execution loop and feed the denial back as a tool result. The model sees the denial reason and can adjust.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import OpenAI from 'openai';
+import { Veto, ToolCallDeniedError } from 'veto-sdk';
+
+const openai = new OpenAI();
+const veto = await Veto.init();
+
+// Define and wrap tools
+const tools = [
+  {
+    name: 'transfer_funds',
+    handler: async (args) => `Transferred $${args.amount} to ${args.to_account}`,
+  },
+];
+const wrappedTools = veto.wrap(tools);
+
+// Tool definitions for OpenAI
+const openaiTools = [{
+  type: 'function' as const,
+  function: {
+    name: 'transfer_funds',
+    description: 'Transfer money between accounts',
+    parameters: {
+      type: 'object',
+      properties: {
+        amount: { type: 'number' },
+        to_account: { type: 'string' },
+      },
+      required: ['amount', 'to_account'],
+    },
+  },
+}];
+
+const messages: OpenAI.ChatCompletionMessageParam[] = [
+  { role: 'user', content: 'Transfer $5000 to ACC-001' },
+];
+
+// Agent loop
+for (let i = 0; i < 5; i++) {
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages,
+    tools: openaiTools,
+  });
+
+  const choice = response.choices[0];
+  if (choice.finish_reason === 'stop') break;
+  if (!choice.message.tool_calls) break;
+
+  messages.push(choice.message);
+
+  for (const toolCall of choice.message.tool_calls) {
+    const args = JSON.parse(toolCall.function.arguments);
+
+    try {
+      const result = await wrappedTools[0].handler(args);
+      messages.push({
+        role: 'tool',
+        tool_call_id: toolCall.id,
+        content: String(result),
+      });
+    } catch (error) {
+      if (error instanceof ToolCallDeniedError) {
+        // Feed the denial back to the model as a tool result
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: `DENIED: ${error.reason}. Please try a different approach.`,
+        });
+        // The model sees this and can retry with lower amount, ask the user, etc.
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+```
+</Tab>
+<Tab value="Python">
+```python
+from openai import AsyncOpenAI
+from veto import Veto
+from veto.core.interceptor import ToolCallDeniedError
+import json
+
+openai = AsyncOpenAI()
+veto = await Veto.init()
+
+# Define and wrap tools
+class Tool:
+    def __init__(self, name, handler):
+        self.name = name
+        self.handler = handler
+
+tools = [Tool("transfer_funds", lambda args: f"Transferred ${args['amount']} to {args['to_account']}")]
+wrapped = veto.wrap(tools)
+
+openai_tools = [{
+    "type": "function",
+    "function": {
+        "name": "transfer_funds",
+        "description": "Transfer money between accounts",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "amount": {"type": "number"},
+                "to_account": {"type": "string"},
+            },
+            "required": ["amount", "to_account"],
+        },
+    },
+}]
+
+messages = [{"role": "user", "content": "Transfer $5000 to ACC-001"}]
+
+# Agent loop
+for _ in range(5):
+    response = await openai.chat.completions.create(
+        model="gpt-4o",
+        messages=messages,
+        tools=openai_tools,
+    )
+
+    choice = response.choices[0]
+    if choice.finish_reason == "stop":
+        break
+    if not choice.message.tool_calls:
+        break
+
+    messages.append(choice.message)
+
+    for tool_call in choice.message.tool_calls:
+        args = json.loads(tool_call.function.arguments)
+
+        try:
+            result = await wrapped[0].handler(args)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": str(result),
+            })
+        except ToolCallDeniedError as e:
+            # Feed the denial back to the model as a tool result
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": f"DENIED: {e.reason}. Please try a different approach.",
+            })
+            # The model sees this and can retry with lower amount, ask the user, etc.
+```
+</Tab>
+</Tabs>
+
+**What happens:** The model calls `transfer_funds(5000)`, Veto blocks it, and the denial reason is returned as a tool result. The model sees `"DENIED: Amount 5000 exceeds limit of 1000"` and can retry with a smaller amount or ask the user for guidance.
+
+## Anthropic (Claude)
+
+Anthropic's API uses `tool_use` content blocks. Feed the denial back as a `tool_result` block.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import { Veto, ToolCallDeniedError } from 'veto-sdk';
+
+const anthropic = new Anthropic();
+const veto = await Veto.init();
+
+const tools = [
+  {
+    name: 'transfer_funds',
+    handler: async (args) => `Transferred $${args.amount} to ${args.to_account}`,
+  },
+];
+const wrappedTools = veto.wrap(tools);
+
+const anthropicTools = [{
+  name: 'transfer_funds',
+  description: 'Transfer money between accounts',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      amount: { type: 'number' },
+      to_account: { type: 'string' },
+    },
+    required: ['amount', 'to_account'],
+  },
+}];
+
+let messages: Anthropic.MessageParam[] = [
+  { role: 'user', content: 'Transfer $5000 to ACC-001' },
+];
+
+// Agent loop
+for (let i = 0; i < 5; i++) {
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1024,
+    messages,
+    tools: anthropicTools,
+  });
+
+  if (response.stop_reason === 'end_turn') break;
+
+  // Collect tool results
+  const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+  for (const block of response.content) {
+    if (block.type !== 'tool_use') continue;
+
+    try {
+      const result = await wrappedTools[0].handler(block.input as Record<string, unknown>);
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: block.id,
+        content: String(result),
+      });
+    } catch (error) {
+      if (error instanceof ToolCallDeniedError) {
+        // Return denial as a tool result — Claude will adapt
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: block.id,
+          content: `DENIED: ${error.reason}. Please adjust your approach.`,
+          is_error: true,
+        });
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  messages.push({ role: 'assistant', content: response.content });
+  messages.push({ role: 'user', content: toolResults });
+}
+```
+</Tab>
+<Tab value="Python">
+```python
+import anthropic
+from veto import Veto
+from veto.core.interceptor import ToolCallDeniedError
+
+client = anthropic.AsyncAnthropic()
+veto = await Veto.init()
+
+class Tool:
+    def __init__(self, name, handler):
+        self.name = name
+        self.handler = handler
+
+tools = [Tool("transfer_funds", lambda args: f"Transferred ${args['amount']} to {args['to_account']}")]
+wrapped = veto.wrap(tools)
+
+anthropic_tools = [{
+    "name": "transfer_funds",
+    "description": "Transfer money between accounts",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "amount": {"type": "number"},
+            "to_account": {"type": "string"},
+        },
+        "required": ["amount", "to_account"],
+    },
+}]
+
+messages = [{"role": "user", "content": "Transfer $5000 to ACC-001"}]
+
+# Agent loop
+for _ in range(5):
+    response = await client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=1024,
+        messages=messages,
+        tools=anthropic_tools,
+    )
+
+    if response.stop_reason == "end_turn":
+        break
+
+    tool_results = []
+
+    for block in response.content:
+        if block.type != "tool_use":
+            continue
+
+        try:
+            result = await wrapped[0].handler(block.input)
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": str(result),
+            })
+        except ToolCallDeniedError as e:
+            # Return denial as a tool result — Claude will adapt
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": f"DENIED: {e.reason}. Please adjust your approach.",
+                "is_error": True,
+            })
+
+    messages.append({"role": "assistant", "content": response.content})
+    messages.append({"role": "user", "content": tool_results})
+```
+</Tab>
+</Tabs>
+
+**What happens:** Setting `is_error: true` on the tool result tells Claude the tool call failed. Claude reads the denial reason and either retries with different arguments or explains the limitation to the user.
+
+## LangChain
+
+LangChain agents handle tool errors through the `ToolMessage` pattern. You have two options:
+
+### Option 1: Return a ToolMessage (recommended)
+
+The agent sees the denial as a normal tool response and can adapt. This is the default behavior when using Veto's LangChain middleware.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { Veto, ToolCallDeniedError } from 'veto-sdk';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
+
+const veto = await Veto.init();
+
+const transferFunds = tool(
+  async ({ amount, to_account }) => {
+    return `Transferred $${amount} to ${to_account}`;
+  },
+  {
+    name: 'transfer_funds',
+    description: 'Transfer money between accounts',
+    schema: z.object({
+      amount: z.number(),
+      to_account: z.string(),
+    }),
+  }
+);
+
+const wrappedTools = veto.wrap([transferFunds]);
+
+// When using with an agent, wrap the tool execution:
+async function executeToolSafely(tool, args) {
+  try {
+    return await tool.invoke(args);
+  } catch (error) {
+    if (error instanceof ToolCallDeniedError) {
+      // Return as a message the agent can read
+      return `Tool call blocked: ${error.reason}`;
+    }
+    throw error;
+  }
+}
+```
+</Tab>
+<Tab value="Python">
+```python
+from langchain_core.tools import tool
+from veto import Veto
+from veto.core.interceptor import ToolCallDeniedError
+
+veto = await Veto.init()
+
+@tool
+def transfer_funds(amount: float, to_account: str) -> str:
+    """Transfer money between accounts."""
+    return f"Transferred ${amount} to {to_account}"
+
+wrapped_tools = veto.wrap([transfer_funds])
+
+# When using with an agent, wrap the tool execution:
+async def execute_tool_safely(tool, args):
+    try:
+        return await tool.ainvoke(args)
+    except ToolCallDeniedError as e:
+        # Return as a message the agent can read
+        return f"Tool call blocked: {e.reason}"
+```
+</Tab>
+</Tabs>
+
+### Option 2: Throw and halt the agent
+
+Use this when any policy violation should stop the entire agent run.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { ToolCallDeniedError } from 'veto-sdk';
+
+try {
+  const result = await agent.invoke({
+    input: 'Transfer $5000 to ACC-001',
+  });
+} catch (error) {
+  if (error instanceof ToolCallDeniedError) {
+    console.error(`Agent blocked: ${error.toolName} — ${error.reason}`);
+    // Show user a message, log the incident, alert ops, etc.
+  }
+}
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto.core.interceptor import ToolCallDeniedError
+
+try:
+    result = await agent.ainvoke({
+        "input": "Transfer $5000 to ACC-001",
+    })
+except ToolCallDeniedError as e:
+    print(f"Agent blocked: {e.tool_name} — {e.reason}")
+    # Show user a message, log the incident, alert ops, etc.
+```
+</Tab>
+</Tabs>
+
+## Retry with modified arguments
+
+When the denial reason indicates the arguments are out of bounds, you can adjust and retry:
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { ToolCallDeniedError } from 'veto-sdk';
+
+async function transferWithRetry(tool, amount: number, to_account: string) {
+  try {
+    return await tool.handler({ amount, to_account });
+  } catch (error) {
+    if (error instanceof ToolCallDeniedError && error.reason.includes('exceeds limit')) {
+      // Extract limit from reason or use a known fallback
+      const maxAmount = 1000;
+      console.warn(`Amount $${amount} blocked. Splitting into chunks of $${maxAmount}.`);
+
+      const results = [];
+      let remaining = amount;
+      while (remaining > 0) {
+        const chunk = Math.min(remaining, maxAmount);
+        results.push(await tool.handler({ amount: chunk, to_account }));
+        remaining -= chunk;
+      }
+      return results.join('; ');
+    }
+    throw error;
+  }
+}
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto.core.interceptor import ToolCallDeniedError
+
+async def transfer_with_retry(tool, amount: float, to_account: str):
+    try:
+        return await tool.handler({"amount": amount, "to_account": to_account})
+    except ToolCallDeniedError as e:
+        if "exceeds limit" in e.reason:
+            max_amount = 1000
+            print(f"Amount ${amount} blocked. Splitting into chunks of ${max_amount}.")
+
+            results = []
+            remaining = amount
+            while remaining > 0:
+                chunk = min(remaining, max_amount)
+                results.append(await tool.handler({"amount": chunk, "to_account": to_account}))
+                remaining -= chunk
+            return "; ".join(str(r) for r in results)
+        raise
+```
+</Tab>
+</Tabs>
+
+## Log mode: test policies without blocking
+
+Use **log mode** to test your policies without disrupting agent behavior. Denied calls execute normally but are flagged in history:
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+// veto.config.yaml: mode: "log"
+const veto = await Veto.init();
+const wrapped = veto.wrap(tools);
+
+// This call would be denied in strict mode, but executes in log mode
+const result = await wrapped[0].handler({ amount: 5000, to_account: 'ACC-001' });
+// result: "Transferred $5000 to ACC-001" (not blocked)
+
+// Check what would have been blocked
+const stats = veto.getHistoryStats();
+console.log(stats.deniedCalls); // 0 (log mode converts deny → allow)
+```
+</Tab>
+<Tab value="Python">
+```python
+# mode="log" in your Veto config
+veto = await Veto.init()
+wrapped = veto.wrap(tools)
+
+# This call would be denied in strict mode, but executes in log mode
+result = await wrapped[0].handler({"amount": 5000, "to_account": "ACC-001"})
+# result: "Transferred $5000 to ACC-001" (not blocked)
+
+# Export decisions to see what would have been blocked
+decisions = veto.export_decisions("json")
+# Entries with "[LOG MODE] Would block:" in the reason were policy violations
+```
+</Tab>
+</Tabs>
+
+See [Modes](/docs/concepts/modes) for more on log vs strict mode.
+
+## Other error types
+
+| Error | When | Properties |
+|-------|------|------------|
+| `ToolCallDeniedError` | Tool call blocked by policy | `toolName`, `reason`, `validationResult` |
+| `BudgetExceededError` | Budget limit reached (TypeScript only) | `spent`, `limit`, `remaining`, `toolName`, `toolCost` |
+| `ApprovalTimeoutError` | Human approval timed out | `approvalId`, `timeoutMs` (TS) / `timeout` (Python) |
+
+All errors extend the standard `Error` (TypeScript) or `Exception` (Python) class, so generic error handlers will catch them.
+
+## Best practices
+
+1. **Always handle `ToolCallDeniedError`** — unhandled denials crash your agent
+2. **Feed denials back to the model** rather than silently dropping them. The model can adapt (try smaller amounts, ask the user, use a different tool)
+3. **Use `is_error: true`** (Anthropic) or return a clear error string (OpenAI) so the model knows the call failed
+4. **Don't retry blindly** — if the same arguments are denied, they'll be denied again. Only retry with modified arguments
+5. **Use log mode first** — test your policies against real traffic before switching to strict mode
+6. **Log denials for audit** — use `veto.getHistoryStats()` or `veto.exportDecisions()` to review what was blocked
