@@ -1,0 +1,183 @@
+---
+title: LangGraph Integration
+description: Use Veto with LangGraph ToolNode to validate tool calls before execution.
+---
+
+Veto integrates with [LangGraph](https://langchain-ai.github.io/langgraph/) by wrapping tools before passing them to a `ToolNode`. Since LangGraph uses LangChain tool definitions, `veto.wrap()` works directly.
+
+## Installation
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```bash
+npm install veto-sdk @langchain/core @langchain/langgraph
+```
+</Tab>
+<Tab value="Python">
+```bash
+pip install veto langchain-core langgraph
+```
+</Tab>
+</Tabs>
+
+## Quick start
+
+Wrap your tools with `veto.wrap()` before passing them to `ToolNode`:
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+
+const tools = [
+  {
+    name: 'transfer_funds',
+    description: 'Transfer money between accounts',
+    func: (input) => `Transferred $${input.amount} to ${input.to_account}`,
+    invoke: async function (input) { return this.func(input); },
+  },
+  {
+    name: 'send_notification',
+    description: 'Send a notification',
+    func: (input) => `Sent '${input.message}' to #${input.channel}`,
+    invoke: async function (input) { return this.func(input); },
+  },
+];
+
+// Wrap tools with Veto validation
+const safeTools = veto.wrap(tools);
+
+// Pass wrapped tools to ToolNode
+// const toolNode = new ToolNode(safeTools);
+```
+</Tab>
+<Tab value="Python">
+```python
+from langchain_core.tools import tool
+from veto import Veto
+
+veto = await Veto.init()
+
+@tool
+def transfer_funds(amount: float, to_account: str) -> str:
+    """Transfer money between accounts."""
+    return f"Transferred ${amount} to {to_account}"
+
+@tool
+def send_notification(message: str, channel: str) -> str:
+    """Send a notification."""
+    return f"Sent '{message}' to #{channel}"
+
+# Wrap tools with Veto validation
+safe_tools = veto.wrap([transfer_funds, send_notification])
+
+# Pass wrapped tools to ToolNode
+# tool_node = ToolNode(safe_tools)
+```
+</Tab>
+</Tabs>
+
+## How it works
+
+`veto.wrap()` detects LangChain tool objects (they have a `func` property) and wraps both `func` and `invoke` methods with validation. When the `ToolNode` calls `tool.ainvoke()` (Python) or `tool.invoke()` (TypeScript), Veto validates the arguments against your policies before the tool executes.
+
+```
+ToolNode calls tool.ainvoke(args)
+         |
+         v
+  Veto validates args
+         |
+    +----+----+
+    |         |
+  allow     deny
+    |         |
+    v         v
+  execute   ToolCallDeniedError
+```
+
+- **Allowed**: The tool executes normally and returns its result to the graph
+- **Denied**: A `ToolCallDeniedError` is raised, which can be caught by the graph's error handling
+
+## Example output
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```
+Tool: transfer_funds (type: LangChain-style func)
+Tool: send_notification (type: LangChain-style func)
+Wrapped 2 tools for LangGraph ToolNode
+
+transfer_funds(500) -> Transferred $500 to ACC-001          # allowed
+transfer_funds(2000) -> DENIED: Tool call denied:           # blocked by rule
+  transfer_funds - Matched rule: Block Large Transfers
+send_notification -> Sent 'Hello' to #general               # allowed
+
+total_calls:    3
+allowed_calls:  2
+denied_calls:   1
+```
+</Tab>
+<Tab value="Python">
+```
+Tool: transfer_funds (type: StructuredTool)
+Tool: send_notification (type: StructuredTool)
+Wrapped 2 tools for LangGraph ToolNode
+
+transfer_funds(500) -> Transferred $500.0 to ACC-001        # allowed
+transfer_funds(2000) -> DENIED: Tool call denied:           # blocked by policy
+  transfer_funds - Amount 2000 exceeds limit of 1000
+send_notification -> Sent 'Hello' to #general               # allowed
+
+total_calls:    3
+allowed_calls:  2
+denied_calls:   1
+```
+</Tab>
+</Tabs>
+
+## ToolNode wrapper
+
+For more control, you can use `createVetoToolNode` / `create_veto_tool_node` to wrap an existing `ToolNode`. This validates all tool calls in a batch before executing any of them, and supports partial denial (some calls allowed, others denied in the same batch).
+
+See [LangChain Integration — LangGraph ToolNode](/docs/integrations/langchain#langgraph-toolnode) for details.
+
+## StateGraph example
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { StateGraph } from '@langchain/langgraph';
+import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+const safeTools = veto.wrap(myTools);
+const toolNode = new ToolNode(safeTools);
+
+const graph = new StateGraph(/* ... */)
+  .addNode("agent", agentNode)
+  .addNode("tools", toolNode)
+  .addEdge("agent", "tools")
+  .addEdge("tools", "agent");
+```
+</Tab>
+<Tab value="Python">
+```python
+from langgraph.graph import StateGraph
+from langgraph.prebuilt import ToolNode
+from veto import Veto
+
+veto = await Veto.init()
+safe_tools = veto.wrap(my_tools)
+tool_node = ToolNode(safe_tools)
+
+graph = StateGraph(...)
+graph.add_node("agent", agent_node)
+graph.add_node("tools", tool_node)
+graph.add_edge("agent", "tools")
+graph.add_edge("tools", "agent")
+```
+</Tab>
+</Tabs>

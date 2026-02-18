@@ -1,0 +1,146 @@
+---
+title: Playwright Integration
+description: Use Veto with Playwright MCP to validate browser automation actions.
+---
+
+Veto works with [Playwright MCP](https://github.com/microsoft/playwright-mcp) by wrapping MCP tool calls. Since Playwright MCP exposes browser automation as MCP tools, you use `veto.wrapMCPTools()` to validate each action before execution.
+
+TypeScript only — uses the Playwright MCP server.
+
+## Installation
+
+```bash
+npm install veto-sdk @anthropic-ai/sdk
+npx playwright install
+```
+
+Set up the Playwright MCP server following the [Playwright MCP docs](https://github.com/microsoft/playwright-mcp).
+
+## Quick start
+
+```typescript
+import { Veto } from 'veto-sdk';
+import Anthropic from '@anthropic-ai/sdk';
+
+const veto = await Veto.init();
+
+// Connect to Playwright MCP server
+const client = new Anthropic();
+const mcpTools = await client.messages.listTools({ server: 'playwright' });
+
+// Wrap MCP tools with Veto validation
+const { tools, callTool } = veto.wrapMCPTools(
+  mcpTools,
+  { callTool: (args) => client.messages.callTool({ server: 'playwright', ...args }) }
+);
+
+// Use `callTool` instead of direct MCP calls
+// Veto validates arguments before forwarding to Playwright
+const result = await callTool({
+  name: 'browser_navigate',
+  arguments: { url: 'https://example.com' },
+});
+```
+
+## How it works
+
+Playwright MCP exposes browser actions as MCP tool definitions (schema-only, no execution logic). `veto.wrapMCPTools()` returns:
+
+1. **`tools`**: The original MCP tool definitions (pass to your AI model as-is)
+2. **`callTool`**: A validated function that checks arguments before forwarding to the MCP server
+
+```
+AI model generates tool call
+         |
+         v
+  callTool(name, args)
+         |
+         v
+  Veto validates args
+         |
+    +----+----+
+    |         |
+  allow     deny
+    |         |
+    v         v
+  forward   ToolCallDeniedError
+  to MCP
+  server
+```
+
+## Example output
+
+```
+MCP tools: browser_navigate, browser_click, browser_type, browser_snapshot
+Wrapped 4 MCP tools
+
+browser_navigate({url: 'https://example.com'})         # allowed
+browser_navigate({url: 'https://malware.site'})         # DENIED by rule
+browser_click({element: 'Submit', ref: '42'})           # allowed
+browser_type({element: 'Search', ref: '15', text: 'hello'})  # allowed
+
+total_calls:    4
+allowed_calls:  3
+denied_calls:   1
+```
+
+## YAML rules for Playwright actions
+
+Block navigation to dangerous URLs:
+
+```yaml
+rules:
+  - id: block-dangerous-urls
+    name: Block navigation to dangerous URLs
+    action: block
+    tools:
+      - browser_navigate
+    conditions:
+      - field: arguments.url
+        operator: matches
+        value: "^https?://(.*\\.)?(malware|phishing|darkweb)\\."
+
+  - id: block-file-urls
+    name: Block file:// protocol
+    action: block
+    tools:
+      - browser_navigate
+    conditions:
+      - field: arguments.url
+        operator: starts_with
+        value: "file://"
+```
+
+Block typing sensitive data:
+
+```yaml
+rules:
+  - id: block-sensitive-input
+    name: Block typing passwords or tokens
+    action: block
+    tools:
+      - browser_type
+    conditions:
+      - field: arguments.text
+        operator: matches
+        value: "(?i)(password|secret|api.?key|token)"
+```
+
+## Playwright MCP tool names
+
+Common tool names exposed by the Playwright MCP server:
+
+| Tool | Description |
+|------|-------------|
+| `browser_navigate` | Navigate to a URL |
+| `browser_click` | Click an element |
+| `browser_type` | Type text into an element |
+| `browser_snapshot` | Take an accessibility snapshot |
+| `browser_screenshot` | Take a screenshot |
+| `browser_go_back` | Navigate back |
+| `browser_go_forward` | Navigate forward |
+| `browser_wait` | Wait for a condition |
+| `browser_press_key` | Press a keyboard key |
+| `browser_select_option` | Select a dropdown option |
+
+Exact tool names depend on the Playwright MCP server version. Use `listTools()` to discover available tools.

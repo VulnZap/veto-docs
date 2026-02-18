@@ -1,0 +1,126 @@
+---
+title: PydanticAI Integration
+description: Use Veto with PydanticAI to validate tool calls before execution.
+---
+
+Veto integrates with [PydanticAI](https://ai.pydantic.dev/) by wrapping tool handler functions. Since PydanticAI tools are function-based, you create wrapper objects and register the wrapped handlers on your PydanticAI agent.
+
+Python only — PydanticAI is a Python framework.
+
+## Installation
+
+```bash
+pip install veto pydantic-ai
+```
+
+## Quick start
+
+```python
+from veto import Veto
+from pydantic_ai import Agent
+
+veto = await Veto.init()
+
+# 1. Define tool functions
+async def transfer_funds_impl(amount: float, to_account: str) -> str:
+    return f"Transferred ${amount} to {to_account}"
+
+async def get_balance_impl(account_id: str) -> str:
+    return f"Balance for {account_id}: $5,000"
+
+# 2. Create tool objects for Veto wrapping
+class MockTool:
+    def __init__(self, name, description, handler):
+        self.name = name
+        self.description = description
+        self.handler = handler
+
+tools = [
+    MockTool("transfer_funds", "Transfer money",
+             handler=lambda args: transfer_funds_impl(args["amount"], args["to_account"])),
+    MockTool("get_balance", "Check balance",
+             handler=lambda args: get_balance_impl(args["account_id"])),
+]
+
+# 3. Wrap with Veto
+wrapped = veto.wrap(tools)
+
+# 4. Register wrapped handlers on PydanticAI agent
+agent = Agent('openai:gpt-4o')
+
+@agent.tool_plain
+async def transfer_funds(amount: float, to_account: str) -> str:
+    """Transfer money between accounts."""
+    result = await wrapped[0].handler({"amount": amount, "to_account": to_account})
+    return str(result)
+
+@agent.tool_plain
+async def get_balance(account_id: str) -> str:
+    """Check account balance."""
+    result = await wrapped[1].handler({"account_id": account_id})
+    return str(result)
+```
+
+## How it works
+
+PydanticAI tools are functions decorated with `@agent.tool_plain` or `@agent.tool`. Since they don't have a `name` property, you bridge them to Veto using a simple wrapper object with `name`, `description`, and `handler` attributes.
+
+`veto.wrap()` detects the `handler` attribute and wraps it with validation:
+
+```
+PydanticAI calls tool function
+         |
+         v
+  Wrapped handler called
+         |
+         v
+  Veto validates args
+         |
+    +----+----+
+    |         |
+  allow     deny
+    |         |
+    v         v
+  execute   ToolCallDeniedError
+```
+
+## Example output
+
+```
+transfer_funds(200) -> Transferred $200 to ACC-001          # allowed
+transfer_funds(5000) -> DENIED: Tool call denied:           # blocked by policy
+  transfer_funds - Amount 5000 exceeds limit of 1000
+get_balance('ACC-001') -> Balance for ACC-001: $5,000       # allowed
+
+total_calls:    3
+allowed_calls:  2
+denied_calls:   1
+```
+
+## Alternative: Validate inside tool functions
+
+If you prefer not to use wrapper objects, you can call `veto.validateToolCall()` directly inside your tool functions:
+
+```python
+from veto import Veto
+from veto.core.interceptor import ToolCallDeniedError
+from pydantic_ai import Agent
+
+veto = await Veto.init()
+agent = Agent('openai:gpt-4o')
+
+@agent.tool_plain
+async def transfer_funds(amount: float, to_account: str) -> str:
+    """Transfer money between accounts."""
+    result = await veto.validate_tool_call(
+        tool_name="transfer_funds",
+        arguments={"amount": amount, "to_account": to_account},
+    )
+    if not result.allowed:
+        raise ToolCallDeniedError(
+            "transfer_funds",
+            result.original_call.id,
+            result.validation_result,
+        )
+    return f"Transferred ${amount} to {to_account}"
+```
