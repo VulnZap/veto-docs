@@ -1,0 +1,620 @@
+---
+title: SDK Reference
+description: Unified API reference with TypeScript and Python implementations for each function.
+---
+
+This page is aligned with the current SDK source in `veto-sdk/packages/sdk` and `veto-sdk/packages/sdk-python`.
+
+Use the language tabs on any section. Selection is shared across the page, so switching once updates all function examples.
+
+## Installation
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```bash
+npm install veto-sdk
+```
+
+</Tab>
+<Tab value="Python">
+
+```bash
+pip install veto
+pip install veto[all]
+```
+
+</Tab>
+</Tabs>
+
+## `Veto.init(options?)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const vetoLocal = await Veto.init();
+const vetoCloud = await Veto.init({ apiKey: 'veto_...' });
+const vetoSelfHosted = await Veto.init({ endpoint: 'https://veto.internal.example.com' });
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from veto import Veto, VetoOptions
+
+veto_local = await Veto.init()
+veto_cloud = await Veto.init(VetoOptions(api_key='veto_...'))
+veto_self_hosted = await Veto.init(VetoOptions(base_url='https://veto.internal.example.com'))
+```
+
+</Tab>
+</Tabs>
+
+## `veto.wrap(tools)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const wrappedTools = veto.wrap(tools);
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+wrapped_tools = veto.wrap(tools)
+```
+
+</Tab>
+</Tabs>
+
+## `veto.wrapTool(tool)` / `veto.wrap_tool(tool)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const safeTool = veto.wrapTool(myTool);
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+safe_tool = veto.wrap_tool(my_tool)
+```
+
+</Tab>
+</Tabs>
+
+## `veto.getHistoryStats()` / `veto.get_history_stats()`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const stats = veto.getHistoryStats();
+// { totalCalls, allowedCalls, deniedCalls, ... }
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+stats = veto.get_history_stats()
+# {"total_calls": ..., "allowed_calls": ..., "denied_calls": ...}
+```
+
+</Tab>
+</Tabs>
+
+## `veto.clearHistory()` / `veto.clear_history()`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+veto.clearHistory();
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+veto.clear_history()
+```
+
+</Tab>
+</Tabs>
+
+## `veto.setApprovalPreference(...)` / `veto.set_approval_preference(...)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+veto.setApprovalPreference('read_file', 'approve_all');
+veto.setApprovalPreference('delete_database', 'deny_all');
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+veto.set_approval_preference('read_file', 'approve_all')
+veto.set_approval_preference('delete_database', 'deny_all')
+```
+
+</Tab>
+</Tabs>
+
+## `veto.getApprovalPreference(...)` / `veto.get_approval_preference(...)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const pref = veto.getApprovalPreference('read_file');
+// 'approve_all' | 'deny_all' | undefined
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+pref = veto.get_approval_preference('read_file')
+# 'approve_all' | 'deny_all' | None
+```
+
+</Tab>
+</Tabs>
+
+## `veto.clearApprovalPreferences(...)` / `veto.clear_approval_preferences(...)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+veto.clearApprovalPreferences('read_file');
+veto.clearApprovalPreferences();
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+veto.clear_approval_preferences('read_file')
+veto.clear_approval_preferences()
+```
+
+</Tab>
+</Tabs>
+
+## `veto.wrapMCPTools(...)` (TypeScript only)
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const { tools, callTool } = veto.wrapMCPTools(mcpTools, mcpServer);
+
+const result = await callTool({
+  name: 'read_file',
+  arguments: { path: '/tmp/example.txt' },
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+# Not available in the Python SDK.
+# Use veto.wrap(...) / veto.wrap_tool(...) with Python tool objects.
+```
+
+</Tab>
+</Tabs>
+
+## `veto.registerTools(...)` (TypeScript only)
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+await veto.registerTools([
+  {
+    name: 'send_email',
+    description: 'Send an email',
+    parameters: [
+      { name: 'to', type: 'string', required: true },
+      { name: 'subject', type: 'string', required: true },
+    ],
+  },
+]);
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+# Not exposed as a top-level Veto method in Python.
+# Python auto-registers signatures when you call veto.wrap(...).
+```
+
+</Tab>
+</Tabs>
+
+## `veto.getBudgetStatus()` / `veto.resetBudget()` (TypeScript only)
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const budget = veto.getBudgetStatus();
+// { spent, limit, remaining, currency } | null
+
+veto.resetBudget();
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+# Budget tracker APIs are not available in the Python SDK.
+```
+
+</Tab>
+</Tabs>
+
+## `ToolCallDeniedError`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+import { ToolCallDeniedError } from 'veto-sdk';
+
+try {
+  await wrappedTool.invoke(args);
+} catch (error) {
+  if (error instanceof ToolCallDeniedError) {
+    console.log(error.toolName);
+    console.log(error.reason);
+    console.log(error.callId);
+  }
+}
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from veto.core.interceptor import ToolCallDeniedError
+
+try:
+    await wrapped_tool.ainvoke(args)
+except ToolCallDeniedError as error:
+    print(error.tool_name)
+    print(error.reason)
+    print(error.call_id)
+```
+
+</Tab>
+</Tabs>
+
+## `ApprovalTimeoutError`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+import { ApprovalTimeoutError } from 'veto-sdk';
+
+try {
+  await client.pollApproval('apr_abc123', {
+    pollInterval: 2000,
+    timeout: 300000,
+  });
+} catch (error) {
+  if (error instanceof ApprovalTimeoutError) {
+    console.log(error.approvalId);
+    console.log(error.timeoutMs);
+  }
+}
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from veto.cloud.client import ApprovalTimeoutError
+
+try:
+    await client.poll_approval('apr_abc123')
+except ApprovalTimeoutError as error:
+    print(error.approval_id)
+    print(error.timeout)
+```
+
+</Tab>
+</Tabs>
+
+## `BudgetExceededError` (TypeScript only)
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+import { BudgetExceededError } from 'veto-sdk';
+
+try {
+  await wrappedTool.invoke(args);
+} catch (error) {
+  if (error instanceof BudgetExceededError) {
+    console.log(error.spent);
+    console.log(error.limit);
+    console.log(error.remaining);
+    console.log(error.toolName);
+    console.log(error.toolCost);
+  }
+}
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+# BudgetExceededError is not currently exposed by the Python SDK.
+```
+
+</Tab>
+</Tabs>
+
+## `VetoCloudClient`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+import { VetoCloudClient } from 'veto-sdk';
+
+const client = new VetoCloudClient({
+  config: {
+    apiKey: 'veto_abc123...',
+    baseUrl: 'https://api.veto.dev',
+    timeout: 30000,
+    retries: 2,
+    retryDelay: 1000,
+  },
+  logger,
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from veto.cloud.client import VetoCloudClient, VetoCloudConfig
+
+client = VetoCloudClient(
+    VetoCloudConfig(
+        api_key='veto_abc123...',
+        base_url='https://api.veto.dev',
+        timeout=30000,
+        retries=2,
+        retry_delay=1000,
+    )
+)
+```
+
+</Tab>
+</Tabs>
+
+## `client.registerTools(...)` / `client.register_tools(...)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+await client.registerTools([
+  {
+    name: 'send_email',
+    description: 'Send an email',
+    parameters: [
+      { name: 'to', type: 'string', required: true },
+      { name: 'subject', type: 'string', required: true },
+      { name: 'body', type: 'string', required: true },
+    ],
+  },
+]);
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from veto.cloud.types import ToolRegistration, ToolParameter
+
+await client.register_tools([
+    ToolRegistration(
+        name='send_email',
+        description='Send an email',
+        parameters=[
+            ToolParameter(name='to', type='string', required=True),
+            ToolParameter(name='subject', type='string', required=True),
+            ToolParameter(name='body', type='string', required=True),
+        ],
+    )
+])
+```
+
+</Tab>
+</Tabs>
+
+## `client.validate(...)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const result = await client.validate('send_email', {
+  to: 'user@example.com',
+  subject: 'Hello',
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+result = await client.validate('send_email', {
+    'to': 'user@example.com',
+    'subject': 'Hello',
+})
+```
+
+</Tab>
+</Tabs>
+
+## `client.pollApproval(...)` / `client.poll_approval(...)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const approval = await client.pollApproval('apr_abc123', {
+  pollInterval: 2000,
+  timeout: 300000,
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from veto.cloud.types import ApprovalPollOptions
+
+approval = await client.poll_approval(
+    'apr_abc123',
+    ApprovalPollOptions(poll_interval=2.0, timeout=300.0)
+)
+```
+
+</Tab>
+</Tabs>
+
+## `client.fetchPolicy(...)` / `client.fetch_policy(...)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const policy = await client.fetchPolicy('send_email');
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+policy = await client.fetch_policy('send_email')
+```
+
+</Tab>
+</Tabs>
+
+## `client.logDecision(...)` / `client.log_decision(...)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+client.logDecision({
+  tool_name: 'send_email',
+  arguments: { to: 'user@example.com' },
+  decision: 'allow',
+  mode: 'deterministic',
+  latency_ms: 2,
+  source: 'client',
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+client.log_decision({
+    'tool_name': 'send_email',
+    'arguments': {'to': 'user@example.com'},
+    'decision': 'allow',
+    'mode': 'deterministic',
+    'latency_ms': 2,
+    'source': 'client',
+})
+```
+
+</Tab>
+</Tabs>
+
+## `client.isToolRegistered(...)` / `client.is_tool_registered(...)`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const isRegistered = client.isToolRegistered('send_email');
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+is_registered = client.is_tool_registered('send_email')
+```
+
+</Tab>
+</Tabs>
+
+## `client.clearRegistrationCache()` / `client.clear_registration_cache()`
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+client.clearRegistrationCache();
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+client.clear_registration_cache()
+```
+
+</Tab>
+</Tabs>
+
+## `client.close()` (Python only)
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+// VetoCloudClient in TypeScript does not expose close().
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+await client.close()
+```
+
+</Tab>
+</Tabs>
+
+For deeper language-specific guides, see [TypeScript SDK](/docs/sdk/typescript) and [Python SDK](/docs/sdk/python).
