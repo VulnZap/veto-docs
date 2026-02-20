@@ -294,7 +294,7 @@ try {
 <Tab value="Python">
 
 ```python
-from veto import ToolCallDeniedError
+from veto.core.interceptor import ToolCallDeniedError
 
 try:
     await wrapped_tool.ainvoke(args)
@@ -332,7 +332,7 @@ try {
 <Tab value="Python">
 
 ```python
-from veto import ApprovalTimeoutError
+from veto.cloud.client import ApprovalTimeoutError
 
 try:
     await client.poll_approval('apr_abc123')
@@ -399,7 +399,7 @@ const client = new VetoCloudClient({
 <Tab value="Python">
 
 ```python
-from veto import VetoCloudClient, VetoCloudConfig
+from veto.cloud.client import VetoCloudClient, VetoCloudConfig
 
 client = VetoCloudClient(
     VetoCloudConfig(
@@ -438,7 +438,7 @@ await client.registerTools([
 <Tab value="Python">
 
 ```python
-from veto import ToolRegistration, ToolParameter
+from veto.cloud.types import ToolRegistration, ToolParameter
 
 await client.register_tools([
     ToolRegistration(
@@ -497,7 +497,7 @@ const approval = await client.pollApproval('apr_abc123', {
 <Tab value="Python">
 
 ```python
-from veto import ApprovalPollOptions
+from veto.cloud.types import ApprovalPollOptions
 
 approval = await client.poll_approval(
     'apr_abc123',
