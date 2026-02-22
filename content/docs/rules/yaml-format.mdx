@@ -8,6 +8,7 @@ Each policy file (e.g. `veto/rules/policy.yaml`) can contain:
 - `output_rules` for post-execution output validation/redaction
 
 For end-to-end examples, see [Output Validation & Redaction](/docs/guides/output-validation).
+For business-hour policies, see [Time-Based Conditions](/docs/rules/time-conditions).
 
 ## Full schema
 
@@ -40,6 +41,13 @@ rules:
       - field: arguments.amount  # Dot notation for nested args
         operator: greater_than   # See operators table below
         value: 1000
+      - field: context.time
+        operator: outside_hours
+        value:
+          start: "09:00"
+          end: "17:00"
+          timezone: "America/New_York"
+          days: ["mon", "tue", "wed", "thu", "fri"]
 
     # Condition groups (optional):
     # OR-of-ANDs — use instead of `conditions` for compound logic
@@ -158,6 +166,37 @@ These operators apply to both `conditions` and `output_conditions`.
 | `not_in` | string/number | Value NOT in denylist | `value: ["admin", "root"]` |
 | `greater_than` | number | Numeric > comparison | `value: 1000` |
 | `less_than` | number | Numeric < comparison | `value: 0` |
+| `within_hours` | object | Time is inside window | `value: { start: "09:00", end: "17:00", timezone: "UTC" }` |
+| `outside_hours` | object | Time is outside window | `value: { start: "09:00", end: "17:00", timezone: "UTC" }` |
+
+For `within_hours` and `outside_hours`, `value` must include:
+- `start` (`HH:MM`, 24-hour)
+- `end` (`HH:MM`, 24-hour)
+- `timezone` (IANA timezone, e.g. `America/New_York`)
+- optional `days` array (`mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`)
+
+## Virtual context fields
+
+Conditions can reference runtime context fields (not just tool arguments):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `context.time` | string | Current timestamp (ISO string), typically used with `within_hours` / `outside_hours` |
+| `context.day_of_week` | string | Current lowercase day abbreviation (`sun`..`sat`) |
+
+Example weekend lock rule:
+
+```yaml
+rules:
+  - id: weekend-lockdown
+    name: Restrict prod deploys on weekends
+    action: block
+    tools: [deploy]
+    conditions:
+      - field: context.day_of_week
+        operator: in
+        value: ["sat", "sun"]
+```
 
 ## Condition groups (OR logic)
 
