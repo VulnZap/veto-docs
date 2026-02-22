@@ -1,6 +1,6 @@
 ---
 title: Quick Start
-description: Get Veto running — manually in 5 minutes, or let your AI agent do it with one prompt.
+description: Set up Veto in 5 minutes, or let your AI coding agent do it with one prompt.
 ---
 
 There are two ways to get started:
@@ -8,11 +8,17 @@ There are two ways to get started:
 | Path | For whom | Time |
 |------|----------|------|
 | [Manual setup](#manual-setup) | Developers integrating by hand | ~5 minutes |
-| [AI agent integration](#ai-agent-integration) | AI coding agents (Claude, Cursor, Copilot, etc.) | ~1 minute |
+| [AI agent integration](#ai-agent-integration) | AI coding agents (Claude Code, Cursor, OpenCode, Codex, etc.) | ~1 minute |
 
 ---
 
 ## Manual setup
+
+### Prerequisites
+
+- **Node.js 18+** or **Python 3.9+**
+- An existing project with AI tool calls you want to guard
+- No API key or account needed — Veto works locally out of the box
 
 ### 1. Install the SDK
 
@@ -48,7 +54,7 @@ The generated config defaults to **local mode** — all validation runs in-proce
 
 ### 3. Write your first rule
 
-Edit `veto/rules/default.yaml`. Here's a practical rule that blocks dangerous file operations:
+Edit `veto/rules/default.yaml`. Here's a practical rule that blocks dangerous file operations and large transfers:
 
 ```yaml title="veto/rules/default.yaml"
 rules:
@@ -138,7 +144,7 @@ const tools = veto.wrap([
 ]);
 
 const response = await anthropic.messages.create({
-  model: 'claude-sonnet-4-5-20250929',
+  model: 'claude-sonnet-4-5',
   max_tokens: 1024,
   tools,
   messages: [{ role: 'user', content: 'Email the team about the outage' }],
@@ -179,7 +185,6 @@ const result = await generateText({
 import { Veto } from 'veto-sdk';
 import { createVetoLangChainMiddleware } from 'veto-sdk/integrations/langchain';
 import { ChatOpenAI } from '@langchain/openai';
-import { createToolCallingAgent, AgentExecutor } from 'langchain/agents';
 import { DynamicTool } from '@langchain/core/tools';
 
 const veto = await Veto.init();
@@ -193,10 +198,10 @@ const tools = [
   }),
 ];
 
-const agent = createToolCallingAgent({
+// The middleware intercepts every tool call before execution
+const agent = middleware.wrapAgent({
   llm: new ChatOpenAI({ model: 'gpt-4o' }),
   tools,
-  middleware: [middleware],
 });
 ```
 
@@ -204,34 +209,38 @@ See [LangChain integration](/docs/integrations/langchain) for ToolNode and callb
 </Tab>
 <Tab value="Python (OpenAI)">
 ```python
+import asyncio
 from openai import OpenAI
 from veto import Veto
 
-client = OpenAI()
-veto = await Veto.init()
+async def main():
+    client = OpenAI()
+    veto = await Veto.init()
 
-tools = veto.wrap([
-    {
-        "type": "function",
-        "function": {
-            "name": "transfer_funds",
-            "description": "Transfer money to an account",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "amount": {"type": "number"},
-                    "to": {"type": "string"},
+    tools = veto.wrap([
+        {
+            "type": "function",
+            "function": {
+                "name": "transfer_funds",
+                "description": "Transfer money to an account",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "amount": {"type": "number"},
+                        "to": {"type": "string"},
+                    },
                 },
             },
         },
-    },
-])
+    ])
 
-response = client.chat.completions.create(
-    model="gpt-4o",
-    tools=tools,
-    messages=[{"role": "user", "content": "Transfer $500 to Alice"}],
-)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        tools=tools,
+        messages=[{"role": "user", "content": "Transfer $500 to Alice"}],
+    )
+
+asyncio.run(main())
 ```
 </Tab>
 <Tab value="MCP">
@@ -256,7 +265,7 @@ const tools = veto.wrap([
 ]);
 ```
 
-See [MCP integration](/docs/integrations/mcp) for full setup.
+See [MCP integration](/docs/integrations/mcp) for full server setup.
 </Tab>
 </Tabs>
 
@@ -266,7 +275,7 @@ When the agent tries to violate a rule, Veto throws a `ToolCallDeniedError`:
 
 ```typescript
 try {
-  // Agent calls transfer_funds({ amount: 50000, to: "offshore-account" })
+  // Agent tries transfer_funds({ amount: 50000, to: "offshore-account" })
   // This triggers the "limit-transfers" rule
   await wrappedTool.execute({ amount: 50000, to: 'offshore-account' });
 } catch (error) {
@@ -283,7 +292,7 @@ try {
 }
 ```
 
-The agent receives the denial as a tool error and can adjust its behavior. Your application code catches the `ToolCallDeniedError` to decide what to do next — retry with different arguments, inform the user, or gracefully degrade. See the [error handling guide](/docs/guides/error-handling) for patterns.
+The agent receives the denial as a tool error and can adjust its behavior. See the [error handling guide](/docs/guides/error-handling) for strategies — feed the error back to the model, throw, or degrade gracefully.
 
 ### 6. Go to production — cloud mode
 
@@ -432,8 +441,9 @@ See [YAML Rule Format](/docs/rules/yaml-format) for the full syntax and [Policy 
 | Where to go | What you'll learn |
 |-------------|-------------------|
 | [YAML Rule Format](/docs/rules/yaml-format) | Full rule syntax — actions, conditions, condition groups, severity |
-| [Policy Packs](/docs/rules/policy-packs) | Pre-built rule sets for common use cases |
-| [SDK Modes](/docs/concepts/modes) | Local, cloud, and self-hosted mode explained |
-| [How Validation Works](/docs/concepts/how-it-works) | Architecture deep dive — caching, approvals, sessions |
-| [Error Handling](/docs/guides/error-handling) | What to do when tools are denied — retry, degrade, inform |
 | [Constraints Reference](/docs/concepts/constraints) | Every constraint type — ranges, regex, enums, arrays |
+| [Error Handling](/docs/guides/error-handling) | What to do when tools are denied — retry, degrade, inform |
+| [Policy Packs](/docs/rules/policy-packs) | Pre-built rule sets you can extend |
+| [SDK Modes](/docs/concepts/modes) | Local, cloud, and self-hosted mode explained |
+| [TypeScript SDK](/docs/sdk/typescript) | Full API reference |
+| [Python SDK](/docs/sdk/python) | Full API reference |

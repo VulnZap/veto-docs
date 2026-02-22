@@ -1,11 +1,11 @@
 ---
 title: What is Veto?
-description: The authorization kernel for AI agents. Intercept, validate, and control every tool call.
+description: The authorization layer for AI agents. Intercept, validate, and control every tool call.
 ---
 
-Veto is the authorization layer between an AI agent and its tools. Every tool call is intercepted, validated against your policies, and either allowed, blocked, or escalated for human approval. The agent never knows the guardrail exists.
+Veto sits between an AI agent and its tools. Every tool call is intercepted, validated against your rules, and either allowed, blocked, or escalated for human approval. The agent never knows the guardrail exists.
 
-```
+```text title="How it works"
 Agent calls tool ──▶ Veto validates ──▶ Tool executes
                           │
                      ┌────┴────┐
@@ -13,124 +13,69 @@ Agent calls tool ──▶ Veto validates ──▶ Tool executes
                    allow     deny / require approval
 ```
 
-<Callout type="info" title="Let your AI agent handle it">
-Copy the integration prompt, paste it into your coding agent (Claude Code, Cursor, OpenCode, Codex, etc.), and it will install Veto, wrap your tools, and generate rules automatically. [See details →](/docs/getting-started/quick-start#ai-agent-integration)
+<Callout type="info" title="Integrate with one prompt">
+Copy this prompt into your AI coding agent (Claude Code, Cursor, OpenCode, Codex, etc.) — it reads the docs, installs the SDK, wraps your tools, and generates rules. [Full details →](/docs/getting-started/quick-start#ai-agent-integration)
 
 <CopyPromptButton />
 </Callout>
 
-## Get started in 3 steps
+## The integration pattern
 
-**1. Install the SDK**
+Install the SDK, wrap your tools, define rules in YAML. The agent code doesn't change.
 
 <Tabs items={["TypeScript", "Python"]}>
 <Tab value="TypeScript">
-```bash
-npm install veto-sdk
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+const tools = veto.wrap(myTools); // drop-in replacement
+
+const agent = createAgent({ tools }); // agent is unaware of Veto
 ```
 </Tab>
 <Tab value="Python">
-```bash
-pip install veto
+```python
+from veto import Veto
+
+veto = Veto.init()
+tools = veto.wrap(my_tools)  # drop-in replacement
+
+agent = create_agent(tools=tools)  # agent is unaware of Veto
 ```
 </Tab>
 </Tabs>
 
-**2. Initialize and write a rule**
-
-```bash
-npx veto init
-# Creates veto/rules/default.yaml — edit it with your constraints
-```
+Rules live in YAML files that the SDK loads automatically:
 
 ```yaml title="veto/rules/default.yaml"
 rules:
   - id: limit-transfers
-    name: Block large transfers
     action: block
-    severity: critical
-    tools:
-      - transfer_funds
+    tools: [transfer_funds]
     conditions:
       - field: arguments.amount
         operator: greater_than
         value: 10000
 ```
 
-**3. Wrap your tools**
+See the [Quick Start](/docs/getting-started/quick-start) for complete, runnable examples with OpenAI, Anthropic, Vercel AI SDK, LangChain, Python, and MCP.
 
-<Tabs items={["TypeScript", "Python"]}>
-<Tab value="TypeScript">
-```typescript
-import OpenAI from 'openai';
-import { Veto } from 'veto-sdk';
+## Features
 
-const openai = new OpenAI();
-const veto = await Veto.init();
+- **Local-first** — works out of the box with YAML rules, no API key or account needed
+- **One-line integration** — `veto.wrap(tools)` works with any provider, any framework
+- **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
+- **LLM validation** — natural language policies for cases static rules can't cover
+- **Budget constraints** — per-session cost circuit breaker for tool calls
+- **Session-aware** — track per-session call counts, argument history, and cross-tool constraints
+- **CLI tooling** — `veto compile` (NL → rules), `veto learn` (observe → generate), `veto test` (gap analysis)
+- **TypeScript + Python** — identical APIs, identical behavior
+- **Real-time dashboard** — monitor every decision at [runveto.com](https://runveto.com)
 
-const tools = veto.wrap([
-  {
-    type: 'function',
-    function: {
-      name: 'transfer_funds',
-      description: 'Transfer money to an account',
-      parameters: {
-        type: 'object',
-        properties: {
-          amount: { type: 'number' },
-          to: { type: 'string' },
-        },
-      },
-    },
-  },
-]);
+## SDK modes
 
-const response = await openai.chat.completions.create({
-  model: 'gpt-4o',
-  tools,
-  messages: [{ role: 'user', content: 'Transfer $500 to Alice' }],
-});
-```
-</Tab>
-<Tab value="Python">
-```python
-from openai import OpenAI
-from veto import Veto
-
-client = OpenAI()
-veto = await Veto.init()
-
-tools = veto.wrap([
-    {
-        "type": "function",
-        "function": {
-            "name": "transfer_funds",
-            "description": "Transfer money to an account",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "amount": {"type": "number"},
-                    "to": {"type": "string"},
-                },
-            },
-        },
-    },
-])
-
-response = client.chat.completions.create(
-    model="gpt-4o",
-    tools=tools,
-    messages=[{"role": "user", "content": "Transfer $500 to Alice"}],
-)
-```
-</Tab>
-</Tabs>
-
-Every tool call is now validated against your rules. The agent code doesn't change.
-
-## Three modes — one SDK
-
-The SDK auto-detects which mode to use. You never call the server directly.
+The SDK auto-detects which mode to use based on how you call `init()`:
 
 | Mode | How to activate | Best for |
 |------|----------------|----------|
@@ -138,38 +83,11 @@ The SDK auto-detects which mode to use. You never call the server directly.
 | **Cloud** (recommended) | `Veto.init({ apiKey: "veto_..." })` | Production. Dashboard, analytics, human-in-the-loop approvals, LLM validation. |
 | **Self-hosted** | `Veto.init({ endpoint: "https://..." })` | Enterprises with data residency requirements. Same features as cloud, on your infrastructure. |
 
-Start local, upgrade to cloud when you need visibility. The SDK handles everything — policy caching, approval polling, decision logging. See [SDK Modes](/docs/concepts/modes).
+Start local, upgrade to cloud when you need visibility. The SDK manages policy caching, approval polling, and decision logging. See [SDK Modes](/docs/concepts/modes).
 
-## Works with every framework
+## Framework support
 
-The SDK wraps any tool format. Deep integrations for all major frameworks:
-
-| Framework | TypeScript | Python |
-|-----------|-----------|--------|
-| [OpenAI SDK](/docs/integrations/openai-sdk) | Provider adapters | — |
-| [OpenAI Agents](/docs/integrations/openai-agents) | Guardrail factories | Guardrail factories |
-| [Anthropic SDK](/docs/integrations/anthropic-sdk) | Provider adapters | — |
-| [Google Gemini](/docs/integrations/google-gemini) | Provider adapters | — |
-| [Vercel AI SDK](/docs/integrations/vercel-ai) | Middleware | — |
-| [LangChain](/docs/integrations/langchain) | Middleware, ToolNode, callbacks | Middleware, ToolNode, callbacks |
-| [LangGraph](/docs/integrations/langgraph) | ToolNode wrapper | ToolNode wrapper |
-| [MCP](/docs/integrations/mcp) | Auto-detected | — |
-| [Browser-Use](/docs/integrations/browser-use) | Controller wrapper | Tools wrapper |
-| [Playwright](/docs/integrations/playwright) | MCP tools wrapper | — |
-| [CrewAI](/docs/integrations/crewai) | — | BaseTool wrapper |
-| [PydanticAI](/docs/integrations/pydanticai) | — | Tool handler wrapper |
-
-## Features
-
-- **Local-first** — works out of the box with YAML rules, no API key or account needed
-- **One-line integration** — `veto.wrap(tools)` works with any provider, any framework
-- **Budget constraints** — per-session cost circuit breaker for tool calls
-- **CLI tooling** — `veto compile` (NL → rules), `veto learn` (observe → generate), `veto test` (gap analysis)
-- **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
-- **LLM validation** — natural language policies for cases static rules can't cover
-- **Session-aware** — track per-session call counts, argument history, and cross-tool constraints
-- **TypeScript + Python** — identical APIs, identical behavior
-- **Real-time dashboard** — monitor every decision at [runveto.com](https://runveto.com)
+The SDK wraps any tool format. Deep integrations for [OpenAI SDK](/docs/integrations/openai-sdk), [OpenAI Agents](/docs/integrations/openai-agents), [Anthropic](/docs/integrations/anthropic-sdk), [Google Gemini](/docs/integrations/google-gemini), [Vercel AI SDK](/docs/integrations/vercel-ai), [LangChain](/docs/integrations/langchain), [LangGraph](/docs/integrations/langgraph), [MCP](/docs/integrations/mcp), [Browser-Use](/docs/integrations/browser-use), [Playwright](/docs/integrations/playwright), [CrewAI](/docs/integrations/crewai), and [PydanticAI](/docs/integrations/pydanticai).
 
 ## Next steps
 
@@ -177,7 +95,4 @@ The SDK wraps any tool format. Deep integrations for all major frameworks:
 |-------------|-------------------|
 | [Quick Start](/docs/getting-started/quick-start) | End-to-end setup with runnable examples for every framework |
 | [YAML Rule Format](/docs/rules/yaml-format) | Complete rule syntax — actions, conditions, severity levels |
-| [SDK Modes](/docs/concepts/modes) | Local, cloud, and self-hosted mode explained |
 | [How Validation Works](/docs/concepts/how-it-works) | Architecture deep dive — caching, approval flow, session tracking |
-| [TypeScript SDK](/docs/sdk/typescript) | Full API reference |
-| [Python SDK](/docs/sdk/python) | Full API reference |
