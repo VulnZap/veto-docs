@@ -43,6 +43,23 @@ rules:
           operator: greater_than
           value: 1000
 
+    # Cross-tool sequence constraints (optional):
+    # Evaluate prior calls in this session history.
+    blocked_by:
+      - tool: read_file
+        conditions:
+          - field: arguments.path
+            operator: starts_with
+            value: "/etc/secrets"
+
+    requires:
+      - tool: verify_identity
+        within: 300            # Optional time window in seconds
+        conditions:
+          - field: arguments.level
+            operator: equals
+            value: strong
+
     # Description (optional):
     # Natural language guidance for the validation LLM
     description: "Ensure the payment recipient is a verified vendor."
@@ -93,6 +110,8 @@ output_rules:
 | `tools` | No | All tools | List of tool names this rule applies to |
 | `conditions` | No | — | Static constraint checks (AND logic) |
 | `condition_groups` | No | — | Compound constraint checks (OR-of-ANDs logic) |
+| `blocked_by` | No | — | Sequence constraint(s): trigger when any listed prior call exists |
+| `requires` | No | — | Sequence constraint(s): trigger when any listed prerequisite call is missing |
 | `description` | No | — | Natural language guidance for LLM validation |
 
 ## Output rule fields (`output_rules`)
@@ -159,6 +178,40 @@ rules:
 This rule triggers if **either** group matches:
 - Amount exceeds 50,000 (any currency), **OR**
 - Amount exceeds 1,000 in a non-approved currency
+
+## Sequence constraints (`blocked_by`, `requires`)
+
+Use sequence constraints when rule decisions depend on earlier tool calls in the same session history.
+
+- `blocked_by`: rule triggers if **any** listed historical call matches.
+- `requires`: rule triggers if **any** listed requirement is **not** found.
+- Historical `conditions` / `condition_groups` are evaluated against the prior call context (use `arguments.*` fields).
+- `within` is optional and measured in seconds from the current call time.
+- Only retained history entries are checked (default history size is 100).
+
+```yaml
+rules:
+  - id: prevent-data-exfiltration
+    name: Block send after sensitive read
+    action: block
+    tools: [send_email, upload_file]
+    blocked_by:
+      - tool: read_file
+        conditions:
+          - field: arguments.path
+            operator: starts_with
+            value: "/etc/secrets"
+
+  - id: require-auth-before-transfer
+    name: Require recent verification
+    action: block
+    tools: [transfer_funds]
+    requires:
+      - tool: verify_identity
+        within: 300
+```
+
+Sequence constraints are currently enforced in local YAML validation mode.
 
 ## Input rule matching logic
 
