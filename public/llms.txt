@@ -6,7 +6,7 @@ You interact with Veto entirely through the SDK. Install it, wrap your tools, de
 
 - **Local** (default): `Veto.init()` — YAML rules evaluated in-process, zero network calls
 - **Cloud** (recommended): `Veto.init({ apiKey: "veto_..." })` — dashboard, analytics, human-in-the-loop approvals, LLM validation
-- **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — validation server on your infrastructure (`ghcr.io/vulnzap/veto-server:latest`); dashboard via Veto Cloud
+- **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — server-side validation on your infrastructure, dashboard not included (`ghcr.io/vulnzap/veto-server:latest`)
 
 TypeScript SDK: `npm install veto-sdk` (v1.7.0)
 Python SDK: `pip install veto` (v0.7.0)

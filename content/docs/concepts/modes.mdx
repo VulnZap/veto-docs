@@ -92,13 +92,14 @@ docker run -p 8080:8080 -e DATABASE_URL=postgres://... ghcr.io/vulnzap/veto-serv
 ```
 
 **What it does:**
-- Runs the validation server (deterministic + LLM policies, approval workflows, decision logging) on your infrastructure
+- Runs the validation server (deterministic + LLM policies) on your infrastructure
 - The `apiKey` authenticates against your self-hosted server
 - All data stays within your network
+- Decision logging to your own PostgreSQL database
 
-The self-hosted server covers the validation API. The dashboard and analytics UI are available with [Veto Cloud](https://runveto.com).
+**Not included:** The self-hosted server is the validation API only. The dashboard, analytics UI, and approval management UI are available through [Veto Cloud](https://runveto.com). You can query decisions and manage approvals programmatically via the [Server API](/docs/api-reference/decisions).
 
-**Best for:** Enterprises with data residency requirements, compliance-heavy environments.
+**Best for:** Enterprises with data residency requirements who need server-side validation on their own infrastructure.
 
 If both `endpoint` and `apiKey` are provided, the SDK logs a warning and uses self-hosted mode with the API key for authentication.
 
