@@ -102,6 +102,23 @@ Policies are cached with stale-while-revalidate:
 
 Policy changes in the dashboard propagate to all connected SDKs within 60 seconds.
 
+## Event webhooks
+
+You can optionally emit webhook notifications after key validation outcomes:
+
+```yaml
+events:
+  webhook:
+    url: "https://hooks.example.com/veto"
+    on: ["deny", "require_approval", "budget_exceeded"]
+    min_severity: "high"
+    format: "slack"  # slack | pagerduty | generic | cef
+```
+
+Webhook delivery is fire-and-forget and does not block validation responses. If webhook delivery fails, Veto logs a warning and returns the original validation decision.
+
+For payload formats and end-to-end examples, see [Event Webhooks](/docs/guides/event-webhooks).
+
 ## API mode
 
 Sends validation requests to a self-hosted endpoint. Use this when you want full control over the validation backend.
