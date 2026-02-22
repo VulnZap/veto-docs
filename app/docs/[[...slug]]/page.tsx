@@ -8,6 +8,7 @@ import {
 import { notFound } from 'next/navigation';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { CopyPromptButton } from '@/app/components/copy-prompt-button';
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -25,7 +26,7 @@ export default async function Page(props: {
       <DocsTitle>{data.title}</DocsTitle>
       <DocsDescription>{data.description}</DocsDescription>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, Tab, Tabs }} />
+        <MDX components={{ ...defaultMdxComponents, Tab, Tabs, CopyPromptButton }} />
       </DocsBody>
     </DocsPage>
   );
