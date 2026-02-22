@@ -66,6 +66,48 @@ Wraps a single tool instance.
 const safeTool = veto.wrapTool(myTool);
 ```
 
+## `veto.guard(toolName, args, context?)`
+
+Run Veto validation as a standalone check without wrapping or executing a tool.
+
+```typescript
+import { Veto, type GuardResult } from 'veto-sdk';
+
+const veto = await Veto.init({ mode: 'log' });
+
+const result: GuardResult = await veto.guard(
+  'wire_transfer',
+  { amount: 25000, recipient: 'vendor-123' },
+  { sessionId: 'session-42', agentId: 'agent-7' }
+);
+
+if (result.decision === 'deny') {
+  console.error(result.reason);
+}
+```
+
+### `GuardResult`
+
+```typescript
+type GuardResult = {
+  decision: 'allow' | 'deny' | 'require_approval';
+  reason?: string;
+  ruleId?: string;
+  severity?: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  approvalId?: string;
+};
+```
+
+### Guard behavior (important)
+
+- Uses the same internal `ValidationEngine.validate()` pipeline as wrapped tool calls.
+- Records every guard check in `HistoryTracker` (`getHistoryStats()` and `exportDecisions()` include guard calls).
+- Never throws `ToolCallDeniedError`; deny outcomes are returned in `GuardResult`.
+- In **log mode**, `guard()` still returns the real policy verdict (`deny` / `require_approval`) instead of converting to `allow`.
+- `context.sessionId` / `context.agentId` override instance-level tracking values for that call only.
+- `require_approval` is returned directly for local approval rules and cloud approval flow checks. `approvalId` is populated when available (for example, cloud responses with `approval_id`).
+- `ruleId` and `severity` are populated from validation metadata when present.
+
 ## `veto.getHistoryStats()`
 
 Returns statistics about validation decisions.

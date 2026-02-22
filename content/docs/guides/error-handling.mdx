@@ -585,6 +585,8 @@ decisions = veto.export_decisions("json")
 </Tab>
 </Tabs>
 
+For standalone checks via `veto.guard(...)`, log mode is intentionally different: it returns the real verdict (`deny` / `require_approval`) so callers can decide what to do.
+
 See [Modes](/docs/concepts/modes) for more on log vs strict mode.
 
 ## Other error types

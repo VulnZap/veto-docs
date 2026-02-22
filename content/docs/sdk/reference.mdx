@@ -92,6 +92,69 @@ safe_tool = veto.wrap_tool(my_tool)
 </Tab>
 </Tabs>
 
+## `veto.guard(...)`
+
+Run Veto validation as a standalone check without wrapping or executing a tool.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+import { Veto, type GuardResult } from 'veto-sdk';
+
+const result: GuardResult = await veto.guard(
+  'wire_transfer',
+  { amount: 25000 },
+  { sessionId: 'session-42', agentId: 'agent-7' }
+);
+
+if (result.decision === 'require_approval') {
+  console.log(result.approvalId);
+}
+```
+
+`GuardResult` fields:
+- `decision`: `'allow' | 'deny' | 'require_approval'`
+- `reason?`: string
+- `ruleId?`: string
+- `severity?`: `'critical' | 'high' | 'medium' | 'low' | 'info'`
+- `approvalId?`: string
+
+</Tab>
+<Tab value="Python">
+
+```python
+from veto import GuardResult
+
+result: GuardResult = await veto.guard(
+    "wire_transfer",
+    {"amount": 25000},
+    session_id="session-42",
+    agent_id="agent-7",
+)
+
+if result.decision == "require_approval":
+    print(result.approval_id)
+```
+
+`GuardResult` fields:
+- `decision`: `'allow' | 'deny' | 'require_approval'`
+- `reason`: `str | None`
+- `rule_id`: `str | None`
+- `severity`: `'critical' | 'high' | 'medium' | 'low' | 'info' | None`
+- `approval_id`: `str | None`
+
+</Tab>
+</Tabs>
+
+### Guard semantics
+
+- Uses the same internal validation engine as wrapped tool execution.
+- Records guard checks in history.
+- Returns deny/approval outcomes instead of throwing `ToolCallDeniedError`.
+- In log mode, `guard()` still returns real policy verdicts (it does not convert denies to allows).
+- Per-call session/agent overrides are supported (`sessionId`/`agentId` in TypeScript, `session_id`/`agent_id` in Python).
+
 ## `veto.getHistoryStats()` / `veto.get_history_stats()`
 
 <Tabs items={["TypeScript", "Python"]}>
