@@ -3,7 +3,11 @@ title: YAML Rule Format
 description: Complete reference for Veto's YAML rule syntax.
 ---
 
-Each rule file (e.g. `veto/rules/policy.yaml`) can contain one or more rules.
+Each policy file (e.g. `veto/rules/policy.yaml`) can contain:
+- `rules` for pre-execution input validation
+- `output_rules` for post-execution output validation/redaction
+
+For end-to-end examples, see [Output Validation & Redaction](/docs/guides/output-validation).
 
 ## Full schema
 
@@ -42,9 +46,42 @@ rules:
     # Description (optional):
     # Natural language guidance for the validation LLM
     description: "Ensure the payment recipient is a verified vendor."
+
+output_rules:
+  - id: unique-output-rule-id    # [Required] Unique identifier
+    name: Human readable name     # [Required] Descriptive name
+    enabled: true                 # [Optional] Default: true
+    severity: high                # [Optional] critical, high, medium, low, info
+    action: redact                # [Required] block, redact, log
+
+    # Scope: which tools does this output rule apply to?
+    tools:
+      - make_payment              # If omitted, applies to ALL tools
+
+    # Output conditions (optional):
+    # Same operators as input conditions
+    output_conditions:
+      - field: output.receipt.email
+        operator: matches
+        value: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+
+    # Output condition groups (optional):
+    # OR-of-ANDs for output checks
+    output_condition_groups:
+      - - field: output.secret
+          operator: contains
+          value: token
+      - - field: output.card
+          operator: matches
+          value: "\\d{16}"
+
+    # Replacement text for redact action
+    redact_with: "[REDACTED]"
+
+    description: "Prevent sensitive data from leaving the tool boundary."
 ```
 
-## Fields
+## Input rule fields (`rules`)
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
@@ -58,7 +95,24 @@ rules:
 | `condition_groups` | No | — | Compound constraint checks (OR-of-ANDs logic) |
 | `description` | No | — | Natural language guidance for LLM validation |
 
+## Output rule fields (`output_rules`)
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `id` | Yes | — | Unique identifier for the output rule |
+| `name` | Yes | — | Human-readable output rule name |
+| `enabled` | No | `true` | Whether the output rule is active |
+| `severity` | No | `medium` | `critical`, `high`, `medium`, `low`, `info` |
+| `action` | Yes | — | `block`, `redact`, `log` |
+| `tools` | No | All tools | List of tool names this output rule applies to |
+| `output_conditions` | No | — | Output checks (AND logic) |
+| `output_condition_groups` | No | — | Output checks (OR-of-ANDs logic) |
+| `redact_with` | No | `[REDACTED]` | Replacement text used for `redact` |
+| `description` | No | — | Human-readable reason (used in logs/block reason) |
+
 ## Condition operators
+
+These operators apply to both `conditions` and `output_conditions`.
 
 | Operator | Type | Description | Example |
 |----------|------|-------------|---------|
@@ -106,7 +160,7 @@ This rule triggers if **either** group matches:
 - Amount exceeds 50,000 (any currency), **OR**
 - Amount exceeds 1,000 in a non-approved currency
 
-## Rule matching logic
+## Input rule matching logic
 
 ### 1. Rule selection
 
@@ -121,6 +175,17 @@ For each intercepted tool call, Veto aggregates all applicable rules (global + s
 
 1. **Static conditions** — if `conditions` are defined, they're checked first. If a condition matches, the rule triggers immediately
 2. **Semantic validation** — if no static conditions match (or none exist), the rule's `name` and `description` are sent to the LLM for semantic evaluation
+
+## Output rule matching logic
+
+For each executed tool result, Veto aggregates all applicable output rules (global + specific) and evaluates `output_conditions` / `output_condition_groups`.
+
+Action resolution order:
+1. If any matched output rule has `action: block`, the output is rejected.
+2. Otherwise, matched `action: redact` rules apply regex replacements using `redact_with`.
+3. Matched `action: log` rules emit warnings and pass output through.
+
+When `block` and `redact` both match, `block` takes precedence.
 
 ## Examples
 

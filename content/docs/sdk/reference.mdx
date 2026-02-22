@@ -27,6 +27,10 @@ pip install veto[all]
 </Tab>
 </Tabs>
 
+Wrapped execution enforces both:
+- input `rules` before tool execution
+- output `output_rules` after tool execution, before returning tool output
+
 ## `Veto.init(options?)`
 
 <Tabs items={["TypeScript", "Python"]}>
@@ -50,6 +54,57 @@ veto_local = await Veto.init()
 veto_cloud = await Veto.init(VetoOptions(api_key='veto_...'))
 veto_self_hosted = await Veto.init(VetoOptions(base_url='https://veto.internal.example.com'))
 ```
+
+</Tab>
+</Tabs>
+
+## `veto.validateOutput(toolName, output)` / `veto.validate_output(tool_name, output)`
+
+Run standalone output validation/redaction without executing a wrapped tool.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const result = veto.validateOutput('fetch_account', {
+  contact: { email: 'alice@example.com' },
+});
+
+if (result.decision === 'block') {
+  throw new Error(result.reason);
+}
+
+console.log(result.output);
+```
+
+`OutputValidationResult` fields:
+- `decision`: `'allow' | 'block'`
+- `output`: transformed output (or `null` when blocked)
+- `reason?`: block reason
+- `matchedRuleIds`: `string[]`
+- `redactions`: `number`
+
+</Tab>
+<Tab value="Python">
+
+```python
+result = veto.validate_output(
+    "fetch_account",
+    {"contact": {"email": "alice@example.com"}},
+)
+
+if result.decision == "block":
+    raise RuntimeError(result.reason)
+
+print(result.output)
+```
+
+`OutputValidationResult` fields:
+- `decision`: `'allow' | 'block'`
+- `output`: transformed output (or `None` when blocked)
+- `reason`: `str | None`
+- `matched_rule_ids`: `list[str] | None`
+- `redactions`: `int`
 
 </Tab>
 </Tabs>
