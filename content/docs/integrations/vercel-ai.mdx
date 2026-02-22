@@ -36,6 +36,17 @@ const result = await generateText({
 });
 ```
 
+## Runnable SDK example
+
+See:
+
+- `packages/sdk/examples/vercel-ai-sdk/vercel_agent.ts`
+
+The example includes both:
+
+- `veto.guard(...)` preflight checks (returns typed decisions without executing tools)
+- wrapped execution path via `veto.wrap(...)` (enforces policy at execution time)
+
 ## Options
 
 | Option | Type | Default | Description |

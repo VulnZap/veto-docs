@@ -18,6 +18,17 @@ const wrappedTools = veto.wrap(mcpToolDefinitions);
 
 No adapter code needed. The SDK detects MCP tools by checking for `inputSchema` (the MCP convention) instead of `parameters` (OpenAI convention) and converts automatically.
 
+## Runnable SDK example
+
+See:
+
+- `packages/sdk/examples/mcp/mcp_agent.ts`
+
+The example shows:
+
+- `veto.guard(...)` preflight checks before forwarding calls
+- `veto.wrapMCPTools(...)` execution-time enforcement for MCP tool calls
+
 ## How MCP tools differ
 
 MCP tools use `inputSchema` instead of `parameters`:
