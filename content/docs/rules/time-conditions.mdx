@@ -1,0 +1,118 @@
+---
+title: Time-Based Conditions
+description: Trigger rules based on local business hours, timezones, and day-of-week context.
+---
+
+Veto YAML rules support two time-window operators for local deterministic checks:
+
+- `within_hours`: matches when the current call time is inside a configured window
+- `outside_hours`: matches when the current call time is outside a configured window
+
+Both operators are evaluated in-process (no network calls) and use timezone-aware conversion.
+
+## Required value shape
+
+Use these operators with `field: context.time` and an object value:
+
+```yaml
+conditions:
+  - field: context.time
+    operator: outside_hours
+    value:
+      start: "09:00"              # HH:MM (24-hour)
+      end: "17:00"                # HH:MM (24-hour)
+      timezone: "America/New_York" # IANA timezone
+      days: ["mon", "tue", "wed", "thu", "fri"] # Optional
+```
+
+`days` is optional:
+- omitted: window applies every day
+- provided: only listed days are in scope (`mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`)
+
+## Context fields
+
+Time conditions use built-in runtime context fields:
+
+- `context.time`: current timestamp (ISO string)
+- `context.day_of_week`: current lowercase day abbreviation (`sun`..`sat`)
+
+You can combine `context.day_of_week` with existing operators like `in`, `not_in`, `equals`, and `not_equals`.
+
+## Examples
+
+### Block calls outside weekday business hours
+
+```yaml
+rules:
+  - id: block-off-hours
+    name: Block outside business hours
+    action: block
+    tools: [wire_transfer]
+    conditions:
+      - field: context.time
+        operator: outside_hours
+        value:
+          start: "09:00"
+          end: "17:00"
+          timezone: "America/New_York"
+          days: ["mon", "tue", "wed", "thu", "fri"]
+```
+
+### Allow only during a timezone-specific window
+
+```yaml
+rules:
+  - id: allow-work-hours
+    name: Allow in work hours
+    action: allow
+    tools: [wire_transfer]
+    conditions:
+      - field: context.time
+        operator: within_hours
+        value:
+          start: "09:00"
+          end: "17:00"
+          timezone: "America/Los_Angeles"
+```
+
+### Weekend lockdown with `context.day_of_week`
+
+```yaml
+rules:
+  - id: weekend-lockdown
+    name: Restrict production deploys on weekends
+    action: block
+    tools: [deploy]
+    conditions:
+      - field: context.day_of_week
+        operator: in
+        value: ["sat", "sun"]
+```
+
+### Overnight windows (`start > end`)
+
+When `start` is later than `end`, Veto treats the window as crossing midnight.
+
+```yaml
+rules:
+  - id: overnight-maintenance-window
+    name: Allow restarts overnight
+    action: allow
+    tools: [restart_service]
+    conditions:
+      - field: context.time
+        operator: within_hours
+        value:
+          start: "22:00"
+          end: "06:00"
+          timezone: "UTC"
+```
+
+## Behavior details
+
+- Timezone conversion is done with `Intl.DateTimeFormat` in TypeScript and `zoneinfo` in Python.
+- Invalid timezone values do not throw; the condition simply evaluates to `false`.
+- If a `days` filter is set, out-of-scope days evaluate to `false` for both `within_hours` and `outside_hours`.
+- For overnight windows with `days`, early-morning times are evaluated against the previous day (window start day).
+
+For the full rule schema and operator table, see [YAML Rule Format](/docs/rules/yaml-format).
