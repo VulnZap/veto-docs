@@ -1,0 +1,98 @@
+---
+title: Anthropic SDK Integration
+description: Use Veto with Anthropic tool use via provider adapters and optional guard preflight checks.
+---
+
+Veto integrates with Anthropic Messages API tool use by converting tool definitions and normalizing `tool_use` blocks into Veto tool calls.
+
+TypeScript only.
+
+## Installation
+
+```bash
+npm install veto-sdk @anthropic-ai/sdk
+```
+
+## Quick start
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import { Veto, ToolCallDeniedError } from 'veto-sdk';
+import { toAnthropic, fromAnthropicToolUse } from 'veto-sdk/providers';
+
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const veto = await Veto.init();
+
+const vetoTools = [
+  {
+    name: 'transfer_funds',
+    description: 'Transfer money between bank accounts',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        amount: { type: 'number' },
+        from_account: { type: 'string' },
+        to_account: { type: 'string' },
+      },
+      required: ['amount', 'from_account', 'to_account'],
+    },
+  },
+];
+
+const anthropicTools = vetoTools.map(toAnthropic);
+
+const response = await client.messages.create({
+  model: 'claude-sonnet-4-20250514',
+  max_tokens: 1024,
+  messages: [{ role: 'user', content: 'Transfer $500 from ACC-1 to ACC-2' }],
+  tools: anthropicTools,
+});
+
+for (const block of response.content) {
+  if (block.type !== 'tool_use') continue;
+  const vetoCall = fromAnthropicToolUse(block);
+
+  // Optional preflight check (no execution, no ToolCallDeniedError throw)
+  const guard = await veto.guard(vetoCall.name, vetoCall.arguments, {
+    sessionId: 'anthropic-session-1',
+    agentId: 'anthropic-agent',
+  });
+  if (guard.decision !== 'allow') {
+    console.log(`Blocked at preflight: ${guard.decision} ${guard.reason ?? ''}`);
+    continue;
+  }
+
+  // Execution-time enforcement
+  const wrapped = veto.wrap([{
+    name: vetoCall.name,
+    handler: async (args: Record<string, unknown>) => ({ ok: true, args }),
+  }]);
+
+  try {
+    const result = await wrapped[0].handler(vetoCall.arguments);
+    console.log(result);
+  } catch (error) {
+    if (error instanceof ToolCallDeniedError) {
+      console.log(`Blocked by policy: ${error.reason}`);
+    } else {
+      throw error;
+    }
+  }
+}
+```
+
+## Adapter functions
+
+| Function | Purpose |
+|----------|---------|
+| `toAnthropic(toolDef)` | Convert a Veto/OpenAI-like tool definition into Anthropic tool format |
+| `fromAnthropicToolUse(toolUse)` | Convert an Anthropic `tool_use` block into normalized `ToolCall` format |
+
+Both are exported from `veto-sdk/providers`.
+
+## Runnable example
+
+See the end-to-end example in:
+
+- `packages/sdk/examples/anthropic-sdk/anthropic_agent.ts`
+

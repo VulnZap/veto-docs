@@ -51,6 +51,17 @@ balance_tool = GetBalanceTool()
 safe_tools = veto.wrap([transfer_tool, balance_tool])
 ```
 
+## Runnable SDK example
+
+See:
+
+- `packages/sdk/examples/crewai/crewai_agent.ts`
+
+The example includes:
+
+- `veto.guard(...)` preflight checks for CrewAI-style tool calls
+- wrapped execution with `veto.wrap(...)` and `execute(...)`
+
 ## How it works
 
 `veto.wrap()` detects CrewAI tools by checking for the `_run` method (the execution method that `BaseTool` subclasses implement). The wrapper validates tool arguments against your policies before calling `_run`.
