@@ -46,8 +46,20 @@ export async function generateMetadata(props: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = page.data as any;
 
+  const slug = params.slug?.join('/') ?? '';
+  const url = slug ? `/docs/${slug}` : '/docs';
+
   return {
     title: data.title,
     description: data.description,
+    openGraph: {
+      title: data.title,
+      description: data.description,
+      url,
+      type: 'article',
+    },
+    alternates: {
+      canonical: url,
+    },
   };
 }
