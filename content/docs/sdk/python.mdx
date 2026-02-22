@@ -76,6 +76,48 @@ Wraps a single tool instance.
 safe_tool = veto.wrap_tool(my_tool)
 ```
 
+## `await veto.guard(tool_name, args, *, session_id=None, agent_id=None)`
+
+Run Veto validation as a standalone check without wrapping or executing a tool.
+
+```python
+from veto import Veto, GuardResult
+
+veto = await Veto.init()
+
+result: GuardResult = await veto.guard(
+    "wire_transfer",
+    {"amount": 25000, "recipient": "vendor-123"},
+    session_id="session-42",
+    agent_id="agent-7",
+)
+
+if result.decision == "deny":
+    print(result.reason)
+```
+
+### `GuardResult` (Python dataclass)
+
+```python
+@dataclass
+class GuardResult:
+    decision: Literal["allow", "deny", "require_approval"]
+    reason: str | None = None
+    rule_id: str | None = None
+    severity: Literal["critical", "high", "medium", "low", "info"] | None = None
+    approval_id: str | None = None
+```
+
+### Guard behavior (important)
+
+- Uses the same internal validation engine path as wrapped tool calls.
+- Records every guard check in history (`get_history_stats()` and `export_decisions()` include guard calls).
+- Never raises `ToolCallDeniedError`; deny outcomes are returned in `GuardResult`.
+- In **log mode**, `guard()` still returns the real policy verdict (`deny` / `require_approval`) instead of converting to `allow`.
+- `session_id` / `agent_id` override instance-level tracking values for that call only.
+- `require_approval` is returned directly for cloud approval checks. `approval_id` is populated when available.
+- `rule_id` and `severity` are populated from validation metadata when present.
+
 ## `veto.get_history_stats()`
 
 Returns statistics about validation decisions.
