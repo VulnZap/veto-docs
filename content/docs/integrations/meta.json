@@ -1,6 +1,7 @@
 {
   "pages": [
     "openai-sdk",
+    "openai-agents",
     "anthropic-sdk",
     "google-gemini",
     "vercel-ai",

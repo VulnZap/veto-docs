@@ -1,0 +1,149 @@
+---
+title: OpenAI Agents Integration
+description: Use Veto guardrails with OpenAI Agents input, output, and tool guardrail hooks.
+---
+
+Veto integrates with OpenAI Agents guardrails at three levels:
+
+| Guardrail | Veto hook | Triggered when |
+|-----------|-----------|----------------|
+| Input guardrail | `veto.guard("agent_input", {"input": ...})` | User input is denied |
+| Output guardrail | `veto.validate_output("agent_output", str(output))` | Agent output is blocked |
+| Tool input guardrail | `veto.guard(tool_name, parsed_args)` | Tool arguments are denied |
+| Tool output guardrail | `veto.validate_output(tool_name, str(output))` | Tool output is blocked |
+
+## Installation
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```bash
+npm install veto-sdk
+```
+
+`veto-sdk/integrations/openai-agents` returns plain protocol-shaped objects (`name`, `guardrailFunction`, `execute`) so it can be used with TypeScript ports/adapters of OpenAI Agents.
+</Tab>
+<Tab value="Python">
+```bash
+pip install veto openai-agents
+```
+</Tab>
+</Tabs>
+
+## Python quick start
+
+```python
+from agents import Agent, Runner, function_tool
+from veto import Veto, VetoOptions
+from veto.integrations.openai_agents import (
+    create_veto_input_guardrail,
+    create_veto_output_guardrail,
+    create_veto_tool_guardrails,
+)
+
+veto = await Veto.init(VetoOptions(api_key="your-key"))
+tool_input_guardrail, tool_output_guardrail = create_veto_tool_guardrails(veto)
+
+@function_tool(
+    tool_input_guardrails=[tool_input_guardrail],
+    tool_output_guardrails=[tool_output_guardrail],
+)
+async def send_email(to: str, body: str) -> str:
+    return f"sent to {to}"
+
+agent = Agent(
+    name="Guarded Agent",
+    tools=[send_email],
+    input_guardrails=[create_veto_input_guardrail(veto)],
+    output_guardrails=[create_veto_output_guardrail(veto)],
+)
+
+result = await Runner.run(agent, "Email john@example.com with account details")
+print(result.final_output)
+```
+
+## TypeScript quick start
+
+```typescript
+import { Veto } from 'veto-sdk';
+import {
+  createVetoInputGuardrail,
+  createVetoOutputGuardrail,
+  createVetoToolGuardrails,
+} from 'veto-sdk/integrations/openai-agents';
+
+const veto = await Veto.init();
+
+const inputGuardrail = createVetoInputGuardrail(veto);
+const outputGuardrail = createVetoOutputGuardrail(veto);
+const [toolInputGuardrail, toolOutputGuardrail] = createVetoToolGuardrails(veto);
+
+// Example usage with a TS OpenAI Agents-style adapter
+const inputResult = await inputGuardrail.guardrailFunction({}, {}, "transfer $100000");
+if (inputResult.tripwireTriggered) {
+  console.log('blocked input', inputResult.outputInfo?.reason);
+}
+
+const toolInputResult = await toolInputGuardrail.guardrailFunction({
+  context: {
+    tool_name: 'transfer_funds',
+    tool_arguments: JSON.stringify({ amount: 100000, to: 'acct_123' }),
+  },
+});
+```
+
+## Factory APIs
+
+### `create_veto_input_guardrail(veto, name=None)` / `createVetoInputGuardrail(veto, name?)`
+
+- Calls `veto.guard("agent_input", {"input": input})`
+- Denied decision returns tripwire output with `reason`
+- Allowed decision returns `tripwire_triggered=False` (Python) / `tripwireTriggered=false` (TypeScript)
+
+### `create_veto_output_guardrail(veto, name=None)` / `createVetoOutputGuardrail(veto, name?)`
+
+- Calls `veto.validate_output("agent_output", str(output))` (Python) / `veto.validateOutput("agent_output", String(output))` (TypeScript)
+- `block` decision returns tripwire output with:
+  - `reason`
+  - `matched_rules` (from `matched_rule_ids` / `matchedRuleIds`)
+
+### `create_veto_tool_guardrails(veto, name=None)` / `createVetoToolGuardrails(veto, name?)`
+
+Returns a tuple/pair of tool input + tool output guardrails.
+
+- Tool input:
+  - Parses `data.context.tool_arguments` JSON
+  - Calls `veto.guard(tool_name, args)`
+  - Denied decision returns `reject_content(reason)`
+- Tool output:
+  - Calls `veto.validate_output(tool_name, str(data.output))` (Python) / `veto.validateOutput(tool_name, String(data.output))` (TypeScript)
+  - `block` decision returns `reject_content(reason)`
+
+## Behavior notes
+
+- Only `deny` decisions trigger input/tool-input guardrail tripwires. Other decisions are passed through.
+- Output guardrails use stringified output (`str(...)` / `String(...)`) for rule evaluation.
+- Python integration requires `openai-agents`; importing and calling factories without it raises a clear install error.
+- TypeScript integration is dependency-free and returns plain objects to maximize compatibility across TS OpenAI Agents implementations.
+
+## Exports
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import {
+  createVetoInputGuardrail,
+  createVetoOutputGuardrail,
+  createVetoToolGuardrails,
+} from 'veto-sdk/integrations/openai-agents';
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto.integrations.openai_agents import (
+    create_veto_input_guardrail,
+    create_veto_output_guardrail,
+    create_veto_tool_guardrails,
+)
+```
+</Tab>
+</Tabs>
