@@ -42,6 +42,11 @@ import { Veto } from 'veto-sdk';
 const vetoLocal = await Veto.init();
 const vetoCloud = await Veto.init({ apiKey: 'veto_...' });
 const vetoSelfHosted = await Veto.init({ endpoint: 'https://veto.internal.example.com' });
+const vetoWithIdentity = await Veto.init({
+  agentId: 'support-agent',
+  userId: 'user-123',
+  role: 'analyst',
+});
 ```
 
 </Tab>
@@ -53,10 +58,24 @@ from veto import Veto, VetoOptions
 veto_local = await Veto.init()
 veto_cloud = await Veto.init(VetoOptions(api_key='veto_...'))
 veto_self_hosted = await Veto.init(VetoOptions(base_url='https://veto.internal.example.com'))
+veto_with_identity = await Veto.init(
+    VetoOptions(
+        agent_id='support-agent',
+        user_id='user-123',
+        role='analyst',
+    )
+)
 ```
 
 </Tab>
 </Tabs>
+
+Common identity options:
+
+- TypeScript: `sessionId`, `agentId`, `userId`, `role`
+- Python: `session_id`, `agent_id`, `user_id`, `role`
+
+These identity values are propagated through `ValidationContext` and guard/cloud validation context payloads.
 
 ## `veto.validateOutput(toolName, output)` / `veto.validate_output(tool_name, output)`
 
@@ -160,7 +179,12 @@ import { Veto, type GuardResult } from 'veto-sdk';
 const result: GuardResult = await veto.guard(
   'wire_transfer',
   { amount: 25000 },
-  { sessionId: 'session-42', agentId: 'agent-7' }
+  {
+    sessionId: 'session-42',
+    agentId: 'agent-7',
+    userId: 'user-99',
+    role: 'admin',
+  }
 );
 
 if (result.decision === 'require_approval') {
@@ -186,6 +210,8 @@ result: GuardResult = await veto.guard(
     {"amount": 25000},
     session_id="session-42",
     agent_id="agent-7",
+    user_id="user-99",
+    role="admin",
 )
 
 if result.decision == "require_approval":
@@ -208,7 +234,7 @@ if result.decision == "require_approval":
 - Records guard checks in history.
 - Returns deny/approval outcomes instead of throwing `ToolCallDeniedError`.
 - In log mode, `guard()` still returns real policy verdicts (it does not convert denies to allows).
-- Per-call session/agent overrides are supported (`sessionId`/`agentId` in TypeScript, `session_id`/`agent_id` in Python).
+- Per-call identity overrides are supported (`sessionId`/`agentId`/`userId`/`role` in TypeScript, `session_id`/`agent_id`/`user_id`/`role` in Python).
 
 ## `veto.getHistoryStats()` / `veto.get_history_stats()`
 

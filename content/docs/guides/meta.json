@@ -1,3 +1,8 @@
 {
-  "pages": ["output-validation", "sequence-constraints", "error-handling"]
+  "pages": [
+    "output-validation",
+    "sequence-constraints",
+    "agent-identity",
+    "error-handling"
+  ]
 }
