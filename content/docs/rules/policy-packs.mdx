@@ -1,0 +1,84 @@
+---
+title: Policy Packs
+description: Built-in policy packs you can extend and customize with YAML.
+---
+
+Veto ships with four built-in policy packs. Add an `extends` field in your YAML file to inherit one, then override or append rules.
+
+```yaml
+version: "1.0"
+extends: "@veto/coding-agent"
+
+rules:
+  # Override an inherited rule by reusing its id.
+  - id: coding-agent-block-dangerous-shell-commands
+    name: Override shell command block
+    action: block
+    tools: [run_shell]
+    conditions:
+      - field: arguments.command
+        operator: contains
+        value: shutdown
+
+  # Add a new rule alongside inherited rules.
+  - id: custom-prod-path-guard
+    name: Block writes to prod path
+    action: block
+    tools: [write_file]
+    conditions:
+      - field: arguments.path
+        operator: starts_with
+        value: /prod
+```
+
+## Merge behavior
+
+When `extends` is set:
+
+1. Veto loads the parent pack first.
+2. Veto merges your `rules` and `output_rules` on top.
+3. If your rule ID matches a pack rule ID, your rule fully replaces the pack rule.
+4. New rule IDs are appended after pack rules.
+
+If the pack name is invalid (for example `@veto/does-not-exist`), Veto logs an error and skips that policy file.
+
+## Available packs
+
+### `@veto/coding-agent`
+
+Purpose: block dangerous shell behavior and sensitive file writes.
+
+Included rules:
+- `coding-agent-block-dangerous-shell-commands`
+- `coding-agent-restrict-sensitive-file-writes`
+- `coding-agent-block-path-traversal-writes`
+
+### `@veto/financial`
+
+Purpose: enforce transfer limits, currency controls, and cumulative transfer caps.
+
+Included rules:
+- `financial-transfer-limit-per-transaction`
+- `financial-currency-allowlist`
+- `financial-cumulative-transfer-cap`
+
+### `@veto/browser-automation`
+
+Purpose: reduce browser automation abuse from risky URLs, password field input, and automatic submissions.
+
+Included rules:
+- `browser-automation-block-malicious-urls`
+- `browser-automation-block-password-input`
+- `browser-automation-block-form-submissions`
+
+### `@veto/data-access`
+
+Purpose: protect database access with SQL injection blocking, row limits, and output redaction for sensitive data.
+
+Included input rules:
+- `data-access-block-sql-injection-patterns`
+- `data-access-limit-row-count`
+
+Included output rules:
+- `data-access-redact-email`
+- `data-access-redact-ssn`

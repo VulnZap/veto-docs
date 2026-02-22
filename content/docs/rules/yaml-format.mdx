@@ -4,15 +4,20 @@ description: Complete reference for Veto's YAML rule syntax.
 ---
 
 Each policy file (e.g. `veto/rules/policy.yaml`) can contain:
+- `extends` to inherit from a built-in policy pack
 - `rules` for pre-execution input validation
 - `output_rules` for post-execution output validation/redaction
 
 For end-to-end examples, see [Output Validation & Redaction](/docs/guides/output-validation).
 For business-hour policies, see [Time-Based Conditions](/docs/rules/time-conditions).
+For built-in packs, see [Policy Packs](/docs/rules/policy-packs).
 
 ## Full schema
 
 ```yaml
+version: "1.0"                  # [Required] Policy schema version
+extends: "@veto/coding-agent"   # [Optional] Inherit built-in pack rules
+
 rules:
   - id: unique-rule-id           # [Required] Unique identifier
     name: Human readable name    # [Required] Descriptive name for logging
@@ -116,6 +121,21 @@ output_rules:
 
     description: "Prevent sensitive data from leaving the tool boundary."
 ```
+
+## Policy file fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `version` | Yes | Schema version. Use `"1.0"` |
+| `extends` | No | Built-in pack name to inherit from (for example `@veto/coding-agent`) |
+| `rules` | No* | Input validation rules |
+| `output_rules` | No* | Output validation and redaction rules |
+
+\* A policy file must define at least one of: `extends`, `rules`, or `output_rules`.
+
+When `extends` is used, Veto loads the pack first, then merges your rules on top:
+- Same rule ID: your rule fully overrides the pack rule
+- New rule ID: your rule is appended
 
 ## Input rule fields (`rules`)
 
