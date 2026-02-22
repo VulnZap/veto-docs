@@ -1,6 +1,6 @@
 # Veto
 
-> The authorization kernel for AI agents. Intercept, validate, and control every tool call. Veto sits between an AI agent and its tools — the agent never knows the guardrail exists.
+> Open-source (Apache 2.0) authorization layer for AI agents. Intercept, validate, and control every tool call. Veto sits between an AI agent and its tools — the agent never knows the guardrail exists.
 
 You interact with Veto entirely through the SDK. Install it, wrap your tools, define your rules. The SDK auto-detects which mode to use:
 
