@@ -50,31 +50,47 @@ export function CopyPromptButton() {
   }, []);
 
   return (
-    <button
-      onClick={handleCopy}
-      className="inline-flex items-center gap-2 border border-fd-border bg-fd-card px-4 py-2 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+    <div className="not-prose my-6 flex items-center justify-between gap-4 border border-fd-border bg-fd-card p-4">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-fd-foreground">
+          Using an AI coding agent?
+        </p>
+        <p className="mt-1 text-sm text-fd-muted-foreground">
+          Copy the integration prompt — paste into Claude Code, Cursor, OpenCode, Codex, etc.{' '}
+          <a
+            href="/docs/getting-started/quick-start#ai-agent-integration"
+            className="text-fd-primary underline underline-offset-2"
+          >
+            Full details
+          </a>
+        </p>
+      </div>
+      <button
+        onClick={handleCopy}
+        className="inline-flex shrink-0 items-center gap-2 border border-fd-border bg-fd-secondary px-4 py-2 text-sm font-medium text-fd-foreground transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground"
       >
-        {copied ? (
-          <path d="M20 6 9 17l-5-5" />
-        ) : (
-          <>
-            <rect width="14" height="14" x="8" y="8" rx="0" ry="0" />
-            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-          </>
-        )}
-      </svg>
-      {copied ? 'Copied!' : 'Copy agent prompt'}
-    </button>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {copied ? (
+            <path d="M20 6 9 17l-5-5" />
+          ) : (
+            <>
+              <rect width="14" height="14" x="8" y="8" rx="0" ry="0" />
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+            </>
+          )}
+        </svg>
+        {copied ? 'Copied' : 'Copy prompt'}
+      </button>
+    </div>
   );
 }

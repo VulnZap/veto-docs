@@ -13,11 +13,7 @@ Agent calls tool ──▶ Veto validates ──▶ Tool executes
                    allow     deny / require approval
 ```
 
-<Callout type="info" title="Integrate with one prompt">
-Copy this prompt into your AI coding agent (Claude Code, Cursor, OpenCode, Codex, etc.) — it reads the docs, installs the SDK, wraps your tools, and generates rules. [Full details →](/docs/getting-started/quick-start#ai-agent-integration)
-
 <CopyPromptButton />
-</Callout>
 
 ## The integration pattern
 
@@ -38,7 +34,7 @@ const agent = createAgent({ tools }); // agent is unaware of Veto
 ```python
 from veto import Veto
 
-veto = Veto.init()
+veto = await Veto.init()
 tools = veto.wrap(my_tools)  # drop-in replacement
 
 agent = create_agent(tools=tools)  # agent is unaware of Veto

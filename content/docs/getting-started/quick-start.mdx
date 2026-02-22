@@ -130,14 +130,13 @@ const veto = await Veto.init();
 
 const tools = veto.wrap([
   {
-    name: 'send_email',
-    description: 'Send an email',
+    name: 'transfer_funds',
+    description: 'Transfer money to an account',
     input_schema: {
       type: 'object',
       properties: {
+        amount: { type: 'number' },
         to: { type: 'string' },
-        subject: { type: 'string' },
-        body: { type: 'string' },
       },
     },
   },
@@ -147,35 +146,40 @@ const response = await anthropic.messages.create({
   model: 'claude-sonnet-4-5',
   max_tokens: 1024,
   tools,
-  messages: [{ role: 'user', content: 'Email the team about the outage' }],
+  messages: [{ role: 'user', content: 'Transfer $500 to Alice' }],
 });
 ```
 </Tab>
 <Tab value="Vercel AI SDK">
 ```typescript
-import { generateText, tool } from 'ai';
-import { openai } from '@ai-sdk/openai';
 import { Veto } from 'veto-sdk';
+import { createVetoMiddleware } from 'veto-sdk/integrations/vercel-ai';
+import { generateText, tool, wrapLanguageModel } from 'ai';
+import { openai } from '@ai-sdk/openai';
 import { z } from 'zod';
 
 const veto = await Veto.init();
+const middleware = createVetoMiddleware(veto);
 
-const tools = veto.wrap({
-  transferFunds: tool({
-    description: 'Transfer money',
-    parameters: z.object({
-      amount: z.number(),
-      to: z.string(),
-    }),
-    execute: async ({ amount, to }) => {
-      return { success: true, amount, to };
-    },
-  }),
+const model = wrapLanguageModel({
+  model: openai('gpt-4o'),
+  middleware,
 });
 
 const result = await generateText({
-  model: openai('gpt-4o'),
-  tools,
+  model,
+  tools: {
+    transfer_funds: tool({
+      description: 'Transfer money to an account',
+      parameters: z.object({
+        amount: z.number(),
+        to: z.string(),
+      }),
+      execute: async ({ amount, to }) => {
+        return { success: true, amount, to };
+      },
+    }),
+  },
   prompt: 'Transfer $500 to Alice',
 });
 ```
@@ -184,7 +188,7 @@ const result = await generateText({
 ```typescript
 import { Veto } from 'veto-sdk';
 import { createVetoLangChainMiddleware } from 'veto-sdk/integrations/langchain';
-import { ChatOpenAI } from '@langchain/openai';
+import { createAgent } from '@langchain/core/agents';
 import { DynamicTool } from '@langchain/core/tools';
 
 const veto = await Veto.init();
@@ -198,10 +202,9 @@ const tools = [
   }),
 ];
 
-// The middleware intercepts every tool call before execution
-const agent = middleware.wrapAgent({
-  llm: new ChatOpenAI({ model: 'gpt-4o' }),
+const agent = createAgent({
   tools,
+  middleware: [middleware],
 });
 ```
 
@@ -274,25 +277,23 @@ See [MCP integration](/docs/integrations/mcp) for full server setup.
 When the agent tries to violate a rule, Veto throws a `ToolCallDeniedError`:
 
 ```typescript
+import { ToolCallDeniedError } from 'veto-sdk';
+
 try {
   // Agent tries transfer_funds({ amount: 50000, to: "offshore-account" })
   // This triggers the "limit-transfers" rule
-  await wrappedTool.execute({ amount: 50000, to: 'offshore-account' });
+  await wrappedTool.handler({ amount: 50000, to: 'offshore-account' });
 } catch (error) {
-  // ToolCallDeniedError: Tool call denied by Veto
-  //   tool: "transfer_funds"
-  //   rule: "limit-transfers"
-  //   reason: "Block large transfers"
-  //   severity: "critical"
-
-  console.log(error.tool);     // "transfer_funds"
-  console.log(error.rule);     // "limit-transfers"
-  console.log(error.reason);   // "Block large transfers"
-  console.log(error.severity); // "critical"
+  if (error instanceof ToolCallDeniedError) {
+    error.toolName;          // "transfer_funds"
+    error.reason;            // "Amount 50000 exceeds limit of 10000"
+    error.callId;            // "tc_abc123"
+    error.validationResult;  // { decision: "deny", reason: "...", metadata: {...} }
+  }
 }
 ```
 
-The agent receives the denial as a tool error and can adjust its behavior. See the [error handling guide](/docs/guides/error-handling) for strategies — feed the error back to the model, throw, or degrade gracefully.
+The agent receives the denial as a tool error and can adjust its behavior — feed the error back to the model so it retries with different arguments, throw to the caller, or degrade gracefully. See the [error handling guide](/docs/guides/error-handling) for framework-specific patterns.
 
 ### 6. Go to production — cloud mode
 
@@ -422,12 +423,11 @@ rules:
       - remove_user
       - delete_repository
 
-  # Rate-limit tool calls per session
+  # Rate-limit tool calls per session (omit tools to apply to all)
   - id: rate-limit-calls
     name: Limit total tool calls per session
     action: block
     severity: medium
-    tools: ["*"]
     conditions:
       - field: session.totalCalls
         operator: greater_than
