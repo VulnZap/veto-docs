@@ -92,9 +92,11 @@ docker run -p 8080:8080 -e DATABASE_URL=postgres://... ghcr.io/vulnzap/veto-serv
 ```
 
 **What it does:**
-- Same features as cloud mode but on your infrastructure
+- Runs the validation server (deterministic + LLM policies, approval workflows, decision logging) on your infrastructure
 - The `apiKey` authenticates against your self-hosted server
 - All data stays within your network
+
+The self-hosted server covers the validation API. The dashboard and analytics UI are available with [Veto Cloud](https://runveto.com).
 
 **Best for:** Enterprises with data residency requirements, compliance-heavy environments.
 

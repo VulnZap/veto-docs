@@ -77,7 +77,7 @@ The SDK auto-detects which mode to use based on how you call `init()`:
 |------|----------------|----------|
 | **Local** (default) | `Veto.init()` | Development, CI, air-gapped environments. YAML rules evaluated in-process, zero network calls. |
 | **Cloud** (recommended) | `Veto.init({ apiKey: "veto_..." })` | Production. Dashboard, analytics, human-in-the-loop approvals, LLM validation. |
-| **Self-hosted** | `Veto.init({ endpoint: "https://..." })` | Enterprises with data residency requirements. Same features as cloud, on your infrastructure. |
+| **Self-hosted** | `Veto.init({ endpoint: "https://..." })` | Enterprises with data residency requirements. Validation server on your infrastructure; dashboard via [Veto Cloud](https://runveto.com). |
 
 Start local, upgrade to cloud when you need visibility. The SDK manages policy caching, approval polling, and decision logging. See [SDK Modes](/docs/concepts/modes).
 
