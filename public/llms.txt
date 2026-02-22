@@ -13,9 +13,9 @@ Python SDK: `pip install veto` (v0.7.0)
 
 ## Getting Started
 
-- [What is Veto?](https://docs.runveto.com/docs): Overview, three SDK modes, framework compatibility table, quick setup
+- [What is Veto?](https://docs.runveto.com/docs): Overview, integration pattern, features, SDK modes, framework support for all 12 integrations
 - [Installation](https://docs.runveto.com/docs/getting-started/installation): Install TypeScript or Python SDK and initialize config
-- [Quick Start](https://docs.runveto.com/docs/getting-started/quick-start): End-to-end setup in 60 seconds with framework examples (OpenAI, Anthropic, Vercel AI SDK, MCP, Python)
+- [Quick Start](https://docs.runveto.com/docs/getting-started/quick-start): Manual setup (6 steps with framework examples for OpenAI, Anthropic, Vercel AI SDK, LangChain, Python, MCP) and AI agent integration (copy-paste prompt for Claude Code, Cursor, OpenCode, Codex). Includes ToolCallDeniedError handling, cloud mode upgrade path, and common starter rules.
 
 ## SDKs
 
