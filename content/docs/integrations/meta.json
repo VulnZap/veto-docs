@@ -1,3 +1,16 @@
 {
-  "pages": ["langchain", "langgraph", "crewai", "pydanticai", "vercel-ai", "mcp", "browser-use", "playwright"]
+  "pages": [
+    "openai-sdk",
+    "openai-agents",
+    "anthropic-sdk",
+    "google-gemini",
+    "vercel-ai",
+    "langchain",
+    "mcp",
+    "browser-use",
+    "crewai",
+    "langgraph",
+    "pydanticai",
+    "playwright"
+  ]
 }

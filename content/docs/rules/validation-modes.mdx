@@ -20,7 +20,7 @@ version: "1.0"
 mode: "strict"
 ```
 
-Supports all YAML condition operators: `equals`, `not_equals`, `contains`, `not_contains`, `starts_with`, `ends_with`, `matches`, `in`, `not_in`, `greater_than`, `less_than`. Also supports expression-based conditions from the compiled rule format.
+Supports all YAML condition operators: `equals`, `not_equals`, `contains`, `not_contains`, `starts_with`, `ends_with`, `matches`, `in`, `not_in`, `greater_than`, `less_than`, `within_hours`, `outside_hours`. Also supports expression-based conditions from the compiled rule format.
 
 Activated automatically when no `apiKey`, `endpoint`, or explicit `validation.mode` is configured.
 
@@ -101,6 +101,23 @@ Policies are cached with stale-while-revalidate:
 | **Expired** | >5min | Fall through to server |
 
 Policy changes in the dashboard propagate to all connected SDKs within 60 seconds.
+
+## Event webhooks
+
+You can optionally emit webhook notifications after key validation outcomes:
+
+```yaml
+events:
+  webhook:
+    url: "https://hooks.example.com/veto"
+    on: ["deny", "require_approval", "budget_exceeded"]
+    min_severity: "high"
+    format: "slack"  # slack | pagerduty | generic | cef
+```
+
+Webhook delivery is fire-and-forget and does not block validation responses. If webhook delivery fails, Veto logs a warning and returns the original validation decision.
+
+For payload formats and end-to-end examples, see [Event Webhooks](/docs/guides/event-webhooks).
 
 ## API mode
 

@@ -24,6 +24,7 @@ Scaffolds a new Veto configuration in the current directory.
 ```bash
 npx veto init
 npx veto init --force    # Overwrite existing files
+npx veto init --pack coding-agent
 ```
 
 Creates:
@@ -32,7 +33,7 @@ Creates:
 veto/
 ├── veto.config.yaml    # Main configuration file
 └── rules/
-    └── default.yaml    # Default rule template
+    └── defaults.yaml   # Default rule template
 ```
 
 The generated `veto.config.yaml` defaults to local mode:
@@ -45,6 +46,21 @@ mode: "strict"
 No API key or account needed to start. Add `VETO_API_KEY` to switch to cloud mode later.
 
 If the `veto/` directory already exists, the command does not overwrite existing files unless `--force` is set.
+
+`--pack` pre-fills `veto/rules/defaults.yaml` with:
+
+```yaml
+version: "1.0"
+extends: "@veto/<pack>"
+```
+
+Supported built-in packs:
+- `coding-agent`
+- `financial`
+- `browser-automation`
+- `data-access`
+
+You can pass either `coding-agent` or `@veto/coding-agent`.
 
 ### `veto compile`
 

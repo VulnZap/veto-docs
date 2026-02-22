@@ -47,6 +47,17 @@ tools = await wrap_browser_use(veto)
 </Tab>
 </Tabs>
 
+## Runnable SDK example
+
+See:
+
+- `packages/sdk/examples/browser-use/browser_agent.ts`
+
+The example includes:
+
+- `veto.guard(...)` preflight checks for representative browser actions
+- `wrapBrowserUse(...)` execution-time enforcement through a wrapped controller
+
 ## Default validated actions
 
 Actions not in this set bypass validation entirely and execute normally.
