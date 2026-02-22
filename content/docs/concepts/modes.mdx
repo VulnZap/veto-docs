@@ -84,6 +84,13 @@ const veto = await Veto.init({
 });
 ```
 
+The server is available as a container image:
+
+```bash
+docker pull ghcr.io/vulnzap/veto-server:latest
+docker run -p 8080:8080 -e DATABASE_URL=postgres://... ghcr.io/vulnzap/veto-server:latest
+```
+
 **What it does:**
 - Same features as cloud mode but on your infrastructure
 - The `apiKey` authenticates against your self-hosted server
