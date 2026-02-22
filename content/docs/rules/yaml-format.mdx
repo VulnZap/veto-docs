@@ -23,6 +23,17 @@ rules:
     tools:                       # [Optional] List of tool names
       - make_payment             # If omitted, applies to ALL tools
 
+    # Optional agent scope:
+    # - list form: include-only
+    # - object form: exclude listed agents
+    agents:
+      - support-agent
+      - ops-agent
+    # OR
+    # agents:
+    #   not:
+    #     - internal-auditor
+
     # Static conditions (optional):
     # Evaluated locally before LLM validation
     conditions:
@@ -108,6 +119,7 @@ output_rules:
 | `severity` | No | `medium` | `critical`, `high`, `medium`, `low`, `info` |
 | `action` | Yes | — | `block`, `warn`, `log`, `allow`, `require_approval` |
 | `tools` | No | All tools | List of tool names this rule applies to |
+| `agents` | No | All agents | Agent scope for local matching: include list (`[a,b]`) or exclusion (`{ not: [a,b] }`) |
 | `conditions` | No | — | Static constraint checks (AND logic) |
 | `condition_groups` | No | — | Compound constraint checks (OR-of-ANDs logic) |
 | `blocked_by` | No | — | Sequence constraint(s): trigger when any listed prior call exists |
@@ -213,14 +225,50 @@ rules:
 
 Sequence constraints are currently enforced in local YAML validation mode.
 
+## Agent scoping (`agents`)
+
+Use `agents` when a rule should only apply for certain agent identities.
+
+### Include-only
+
+```yaml
+rules:
+  - id: scoped-rule
+    name: Applies only to selected agents
+    action: block
+    tools: [deploy]
+    agents:
+      - deploy-bot
+      - ci-agent
+```
+
+### Exclusion
+
+```yaml
+rules:
+  - id: excluded-rule
+    name: Applies to everyone except excluded agents
+    action: require_approval
+    tools: [transfer_funds]
+    agents:
+      not:
+        - internal-auditor
+```
+
+Matching rules:
+- no `agents` field: applies to all agents
+- `agents: [a, b]`: applies only for `a` or `b`
+- `agents: { not: [a, b] }`: applies for everyone except `a` or `b`
+
 ## Input rule matching logic
 
 ### 1. Rule selection
 
-Veto selects rules based on the `tools` list:
+Veto selects rules based on `tools`, then applies any `agents` scope:
 
 - **Tool-specific rules**: If a rule lists specific tools (e.g. `tools: [make_payment]`), it only applies when those tools are called
 - **Global rules**: If `tools` is missing or empty `[]`, the rule activates for every tool call
+- **Agent-scoped rules**: If `agents` is present, the rule is further filtered by current agent identity before evaluating conditions
 
 ### 2. Validation execution
 

@@ -1,0 +1,92 @@
+---
+title: Agent Identity & Role Scoping
+description: Scope rules to specific agents and pass agent/user/role identity into ValidationContext.
+---
+
+Veto rules can now be scoped by agent identity, so a rule can apply to only selected agents or everyone except selected agents.
+
+## Rule scoping with `agents`
+
+Use `agents` on an input rule (`rules`) to control which agent IDs the rule applies to.
+
+### Include-only scope
+
+Rule applies only when `agentId` / `agent_id` is in the list.
+
+```yaml
+rules:
+  - id: block-prod-deploy-for-bots
+    name: Block prod deploy for deployment bots
+    action: block
+    tools: [deploy]
+    agents:
+      - deploy-bot
+      - ci-agent
+```
+
+### Exclusion scope
+
+Rule applies to everyone except listed agents.
+
+```yaml
+rules:
+  - id: require-review-except-auditor
+    name: Require review except internal auditor
+    action: require_approval
+    tools: [transfer_funds]
+    agents:
+      not:
+        - internal-auditor
+```
+
+### Matching behavior
+
+- No `agents` field: rule applies to all agents (previous behavior).
+- `agents: [a, b]`: rule is skipped unless current agent is `a` or `b`.
+- `agents: { not: [a, b] }`: rule is skipped when current agent is `a` or `b`.
+
+Agent scoping is enforced in local YAML rule evaluation before condition checks.
+
+## Identity options in `Veto.init()`
+
+You can set default identity fields on the SDK instance.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const veto = await Veto.init({
+  agentId: 'support-agent',
+  userId: 'user-123',
+  role: 'analyst',
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+veto = await Veto.init(
+    VetoOptions(
+        agent_id="support-agent",
+        user_id="user-123",
+        role="analyst",
+    )
+)
+```
+
+</Tab>
+</Tabs>
+
+These defaults are included in `ValidationContext` and can be overridden per guard call.
+
+## ValidationContext fields
+
+Custom validators now receive:
+- agent identity: `agentId` (TypeScript) / `agent_id` (Python)
+- user identity: `userId` / `user_id`
+- role: `role`
+
+This is useful for org-specific policy logic in custom validators and hooks.
+
+For full YAML syntax, see [YAML Rule Format](/docs/rules/yaml-format).
