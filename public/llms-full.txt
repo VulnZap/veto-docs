@@ -1,12 +1,12 @@
 # Veto
 
-> The authorization kernel for AI agents. Intercept, validate, and control every tool call. Veto sits between an AI agent and its tools — the agent never knows the guardrail exists.
+> Open-source authorization layer for AI agents. Intercept, validate, and control every tool call. Veto sits between an AI agent and its tools — the agent never knows the guardrail exists.
 
 You interact with Veto entirely through the SDK. Install it, wrap your tools, define your rules. The SDK auto-detects which mode to use:
 
 - **Local** (default): `Veto.init()` — YAML rules evaluated in-process, zero network calls
 - **Cloud** (recommended): `Veto.init({ apiKey: "veto_..." })` — dashboard, analytics, human-in-the-loop approvals, LLM validation
-- **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — same features as cloud, on your infrastructure
+- **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — server-side validation on your infrastructure, dashboard not included (`ghcr.io/vulnzap/veto-server:latest`)
 
 TypeScript SDK: `npm install veto-sdk` (v1.7.0)
 Python SDK: `pip install veto` (v0.7.0)

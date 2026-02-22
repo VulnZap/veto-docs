@@ -84,12 +84,22 @@ const veto = await Veto.init({
 });
 ```
 
+The server is available as a container image:
+
+```bash
+docker pull ghcr.io/vulnzap/veto-server:latest
+docker run -p 8080:8080 -e DATABASE_URL=postgres://... ghcr.io/vulnzap/veto-server:latest
+```
+
 **What it does:**
-- Same features as cloud mode but on your infrastructure
+- Runs the validation server (deterministic + LLM policies) on your infrastructure
 - The `apiKey` authenticates against your self-hosted server
 - All data stays within your network
+- Decision logging to your own PostgreSQL database
 
-**Best for:** Enterprises with data residency requirements, compliance-heavy environments.
+**Not included:** The self-hosted server is the validation API only. The dashboard, analytics UI, and approval management UI are available through [Veto Cloud](https://runveto.com). You can query decisions and manage approvals programmatically via the [Server API](/docs/api-reference/decisions).
+
+**Best for:** Enterprises with data residency requirements who need server-side validation on their own infrastructure.
 
 If both `endpoint` and `apiKey` are provided, the SDK logs a warning and uses self-hosted mode with the API key for authentication.
 
@@ -157,3 +167,7 @@ Orthogonal to the runtime mode, Veto has two operating modes that control what h
 | `log` | Logs denied calls but allows execution to continue |
 
 Use `log` mode during initial rollout to observe what would be blocked without affecting agent behavior.
+
+## License
+
+The Veto SDK and server are released under the [Apache 2.0 license](https://github.com/VulnZap/veto-sdk/blob/main/LICENSE). You can use, modify, and distribute the code freely. Apache 2.0 does not grant rights to the Veto trademark or logo — the "Veto" name and branding remain the property of VulnZap.
