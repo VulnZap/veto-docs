@@ -1,0 +1,91 @@
+---
+title: Event Webhooks
+description: Send real-time validation alerts to Slack, PagerDuty, generic webhooks, or SIEMs.
+---
+
+Veto can emit webhook notifications after validation outcomes so you can react to policy decisions in real time.
+
+Supported event types:
+- `deny`
+- `require_approval`
+- `budget_exceeded`
+
+## Configure `events.webhook`
+
+Add this to `veto.config.yaml`:
+
+```yaml
+events:
+  webhook:
+    url: "https://hooks.example.com/veto"
+    on: ["deny", "require_approval", "budget_exceeded"]
+    min_severity: "medium"   # critical | high | medium | low | info
+    format: "generic"        # slack | pagerduty | generic | cef
+```
+
+### Field reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `url` | Yes | Webhook endpoint that receives HTTP POST requests |
+| `on` | Yes | Event types to emit (`deny`, `require_approval`, `budget_exceeded`) |
+| `min_severity` | No | Minimum severity threshold to send (`info` default) |
+| `format` | No | Payload adapter (`generic` default) |
+
+## Slack example
+
+```yaml
+events:
+  webhook:
+    url: "https://hooks.slack.com/services/T000/B000/XXX"
+    on: ["deny", "require_approval"]
+    min_severity: "high"
+    format: "slack"
+```
+
+`format: slack` sends Block Kit JSON (`text` + `blocks`) with tool, decision, severity, rule ID, reason, and timestamp.
+
+## PagerDuty example
+
+```yaml
+events:
+  webhook:
+    url: "https://events.pagerduty.com/v2/enqueue"
+    on: ["deny", "budget_exceeded"]
+    min_severity: "medium"
+    format: "pagerduty"
+```
+
+`format: pagerduty` emits an Events API v2-style payload with:
+- `event_action: "trigger"`
+- `dedup_key`
+- `payload.summary`, `payload.source`, `payload.severity`
+- `payload.custom_details` containing all Veto event fields
+
+## Generic payload shape
+
+`format: generic` sends plain JSON:
+
+```json
+{
+  "event_type": "deny",
+  "tool_name": "send_email",
+  "arguments": { "to": "vendor@example.com" },
+  "decision": "deny",
+  "reason": "Matched rule: deny-external-email",
+  "rule_id": "deny-external-email",
+  "severity": "high",
+  "timestamp": "2026-02-22T10:00:00.000Z"
+}
+```
+
+## CEF format
+
+`format: cef` sends a Common Event Format string (`CEF:0|...`) for SIEM pipelines.
+
+## Delivery behavior
+
+- Webhook delivery is asynchronous fire-and-forget.
+- Validation responses are never blocked by webhook delivery or webhook failures.
+- Delivery errors are logged as warnings only.
+- `min_severity` filtering is applied before sending.
