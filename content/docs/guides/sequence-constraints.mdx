@@ -1,0 +1,69 @@
+---
+title: Cross-Tool Sequence Constraints
+description: Use blocked_by and requires to enforce rule relationships across earlier tool calls in a session.
+---
+
+Sequence constraints let a rule depend on prior calls, not just the current tool arguments.
+
+## Why use this
+
+Use sequence constraints for workflows like:
+- block exfiltration after reading sensitive files
+- require authentication before money movement
+- enforce step ordering in multi-step tool flows
+
+## Fields
+
+### `blocked_by`
+
+Trigger the rule when a matching historical call exists.
+
+```yaml
+rules:
+  - id: prevent-data-exfiltration
+    name: Block send after secret read
+    action: block
+    tools: [send_email, upload_file]
+    blocked_by:
+      - tool: read_file
+        conditions:
+          - field: arguments.path
+            operator: starts_with
+            value: "/etc/secrets"
+```
+
+### `requires`
+
+Trigger the rule when a required historical call is missing.
+
+```yaml
+rules:
+  - id: require-auth-before-transfer
+    name: Require recent auth
+    action: block
+    tools: [transfer_funds]
+    requires:
+      - tool: verify_identity
+        within: 300
+```
+
+`within` is optional and measured in seconds from the current call timestamp.
+
+## Matching behavior
+
+- `blocked_by` uses OR semantics across entries: if any entry matches, the sequence condition is satisfied.
+- `requires` uses required semantics across entries: if any entry is missing, the rule triggers.
+- Historical `conditions` / `condition_groups` are evaluated against the historical call context (`arguments.*`, `tool_name`, etc.).
+- Denied historical calls do not satisfy `requires`.
+
+If both `blocked_by` and `requires` are present on the same rule, the rule triggers when either:
+- a `blocked_by` entry matches, or
+- a `requires` entry is missing.
+
+## Scope and caveats
+
+- Sequence checks use session call history tracked by the SDK.
+- History is bounded (default 100 entries); evicted entries cannot satisfy sequence checks.
+- This behavior is currently enforced in local YAML validation mode.
+
+For the complete YAML reference, see [YAML Rule Format](/docs/rules/yaml-format).
