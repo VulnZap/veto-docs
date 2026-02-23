@@ -8,8 +8,8 @@ You interact with Veto entirely through the SDK. Install it, wrap your tools, de
 - **Cloud** (recommended): `Veto.init({ apiKey: "veto_..." })` — dashboard, analytics, human-in-the-loop approvals, LLM validation
 - **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — server-side validation on your infrastructure, dashboard not included (`ghcr.io/vulnzap/veto-server:latest`)
 
-TypeScript SDK: `npm install veto-sdk` (v1.7.0)
-Python SDK: `pip install veto` (v0.7.0)
+TypeScript SDK: `npm install veto-sdk` (v1.9.0)
+Python SDK: `pip install veto` (v0.9.0)
 
 ## Getting Started
 
@@ -19,8 +19,8 @@ Python SDK: `pip install veto` (v0.7.0)
 
 ## SDKs
 
-- [TypeScript SDK](https://docs.runveto.com/docs/sdk/typescript): Full API reference (v1.7.0) — Veto.init, wrap, wrapTool, exportDecisions, VetoCloudClient, error types, provider adapters, all exports
-- [Python SDK](https://docs.runveto.com/docs/sdk/python): Full API reference (v0.7.0) — Veto.init, wrap, wrap_tool, export_decisions, VetoCloudClient, error types
+- [TypeScript SDK](https://docs.runveto.com/docs/sdk/typescript): Full API reference (v1.9.0) — Veto.init, wrap, wrapTool, exportDecisions, VetoCloudClient, error types, provider adapters, all exports
+- [Python SDK](https://docs.runveto.com/docs/sdk/python): Full API reference (v0.9.0) — Veto.init, wrap, wrap_tool, export_decisions, VetoCloudClient, error types
 - [CLI](https://docs.runveto.com/docs/sdk/cli): Commands — init, compile (NL → YAML rules), learn (observe → generate), test (gap analysis), version
 
 ## Integrations
@@ -59,6 +59,7 @@ Python SDK: `pip install veto` (v0.7.0)
 - [Event Webhooks](https://docs.runveto.com/docs/guides/event-webhooks): Webhook notifications for deny, require_approval, budget_exceeded events; Slack, PagerDuty, generic, CEF formats
 - [Output Validation & Redaction](https://docs.runveto.com/docs/guides/output-validation): block/redact/log output_rules; regex redaction; standalone validateOutput API; built-in PII pattern constants
 - [Cross-Tool Sequence Constraints](https://docs.runveto.com/docs/guides/sequence-constraints): blocked_by (prevent exfiltration) and requires (enforce auth) — depend on prior session calls
+- [Browser Agents (Chrome Extensions)](https://docs.runveto.com/docs/guides/browser-agents): Use `veto-sdk/browser` and `Veto.fromRules()` for Chrome extensions, Manifest V3 service workers, and browser agents without Node.js filesystem dependencies
 
 ## Server API
 
