@@ -46,7 +46,12 @@ async def transfer_funds(amount: float, to_account: str) -> str:
 ## Decorator API
 
 ```python
+from veto import Veto
+from pydantic_ai import Agent
 from veto.integrations.pydanticai import create_veto_tool_decorator
+
+veto = await Veto.init()
+agent = Agent("openai:gpt-4o")
 
 @agent.tool_plain
 @create_veto_tool_decorator(veto, "get_balance")
