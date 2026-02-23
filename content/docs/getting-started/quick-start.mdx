@@ -100,7 +100,8 @@ Create `demo.py` and paste:
 
 ```python
 import asyncio
-from veto import Veto, ToolCallDeniedError
+from veto import Veto
+from veto.core.interceptor import ToolCallDeniedError
 
 async def main():
     veto = await Veto.init()

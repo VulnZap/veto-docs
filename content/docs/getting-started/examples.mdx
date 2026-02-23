@@ -124,34 +124,38 @@ const tools = veto.wrap([
 ## Python (OpenAI)
 
 ```python
+import asyncio
 from openai import OpenAI
 from veto import Veto
 
-client = OpenAI()
-veto = await Veto.init()
+async def main():
+    client = OpenAI()
+    veto = await Veto.init()
 
-tools = veto.wrap([
-    {
-        "type": "function",
-        "function": {
-            "name": "transfer_funds",
-            "description": "Transfer money to an account",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "amount": {"type": "number"},
-                    "to": {"type": "string"},
+    tools = veto.wrap([
+        {
+            "type": "function",
+            "function": {
+                "name": "transfer_funds",
+                "description": "Transfer money to an account",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "amount": {"type": "number"},
+                        "to": {"type": "string"},
+                    },
                 },
             },
         },
-    },
-])
+    ])
 
-response = client.chat.completions.create(
-    model="gpt-4o",
-    tools=tools,
-    messages=[{"role": "user", "content": "Transfer $500 to Alice"}],
-)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        tools=tools,
+        messages=[{"role": "user", "content": "Transfer $500 to Alice"}],
+    )
+
+asyncio.run(main())
 ```
 
 ## Next steps
