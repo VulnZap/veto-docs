@@ -1,32 +1,47 @@
 ---
 title: Quick Start
-description: See Veto block a tool call in under 2 minutes. No API key, no account, no network.
+description: Set up Veto in 5 minutes, or let your AI coding agent do it with one prompt.
 ---
 
-Veto works locally out of the box. This tutorial gives you a fully runnable example — copy-paste each step and see Veto allow one tool call and block another.
+There are two ways to get started:
 
-## 1. Install
+| Path | For whom | Time |
+|------|----------|------|
+| [Manual setup](#manual-setup) | Developers integrating by hand | ~5 minutes |
+| [AI agent integration](#ai-agent-integration) | AI coding agents (Claude Code, Cursor, OpenCode, Codex, etc.) | ~1 minute |
+
+---
+
+## Manual setup
+
+### Prerequisites
+
+- **Node.js 18+** or **Python 3.9+**
+- An existing project with AI tool calls you want to guard
+- No API key or account needed — Veto works locally out of the box
+
+### 1. Install the SDK
 
 <Tabs items={["TypeScript", "Python"]}>
 <Tab value="TypeScript">
-
 ```bash
 npm install veto-sdk
-npx veto init
 ```
-
 </Tab>
 <Tab value="Python">
-
 ```bash
 pip install veto
-veto init
 ```
-
 </Tab>
 </Tabs>
 
-This creates a `veto/` directory with your config:
+### 2. Initialize configuration
+
+```bash
+npx veto init
+```
+
+This creates a `veto/` directory:
 
 ```
 veto/
@@ -35,119 +50,400 @@ veto/
     └── default.yaml
 ```
 
-## 2. Write a rule
+The generated config defaults to **local mode** — all validation runs in-process using your YAML rules. No API key, no account, no network calls.
 
-Replace the contents of `veto/rules/default.yaml` with:
+### 3. Write your first rule
 
-```yaml
+Edit `veto/rules/default.yaml`. Here's a practical rule that blocks dangerous file operations and large transfers:
+
+```yaml title="veto/rules/default.yaml"
 rules:
+  - id: block-sensitive-paths
+    name: Block access to sensitive paths
+    action: block
+    severity: critical
+    tools:
+      - read_file
+      - write_file
+      - delete_file
+    conditions:
+      - field: arguments.path
+        operator: matches
+        value: "(\\.env|/etc/passwd|credentials|secrets)"
+
   - id: limit-transfers
     name: Block large transfers
     action: block
+    severity: critical
     tools:
       - transfer_funds
     conditions:
       - field: arguments.amount
         operator: greater_than
-        value: 1000
+        value: 10000
 ```
 
-Any call to `transfer_funds` with `amount > 1000` will be blocked.
+### 4. Add to your existing code
 
-## 3. Run it
+Pick your framework — every example below is complete and runnable.
 
-<Tabs items={["TypeScript", "Python"]}>
-<Tab value="TypeScript">
-
-Create `demo.ts` and paste:
-
+<Tabs items={["OpenAI", "Anthropic", "Vercel AI SDK", "LangChain", "Python (OpenAI)", "MCP"]}>
+<Tab value="OpenAI">
 ```typescript
-import { Veto, ToolCallDeniedError } from 'veto-sdk';
+import OpenAI from 'openai';
+import { Veto } from 'veto-sdk';
 
+const openai = new OpenAI();
 const veto = await Veto.init();
 
-const tools = veto.wrap([{
-  name: 'transfer_funds',
-  handler: async (args: any) => `Transferred $${args.amount} to ${args.to}`,
-}]);
+const tools = veto.wrap([
+  {
+    type: 'function',
+    function: {
+      name: 'transfer_funds',
+      description: 'Transfer money to an account',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: { type: 'number' },
+          to: { type: 'string' },
+        },
+      },
+    },
+  },
+]);
 
-// This one passes ($500 is under the $1000 limit)
-const result = await tools[0].handler({ amount: 500, to: 'Alice' });
-console.log('Allowed:', result);
-
-// This one gets blocked ($5000 exceeds the $1000 limit)
-try {
-  await tools[0].handler({ amount: 5000, to: 'Bob' });
-} catch (error) {
-  if (error instanceof ToolCallDeniedError) {
-    console.log('Denied:', error.reason);
-  }
-}
-
-console.log('Stats:', veto.getHistoryStats());
+const response = await openai.chat.completions.create({
+  model: 'gpt-5.2',
+  tools,
+  messages: [{ role: 'user', content: 'Transfer $500 to Alice' }],
+});
 ```
-
-Run it:
-
-```bash
-npx tsx demo.ts
-```
-
 </Tab>
-<Tab value="Python">
+<Tab value="Anthropic">
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import { Veto } from 'veto-sdk';
 
-Create `demo.py` and paste:
+const anthropic = new Anthropic();
+const veto = await Veto.init();
 
+const tools = veto.wrap([
+  {
+    name: 'transfer_funds',
+    description: 'Transfer money to an account',
+    input_schema: {
+      type: 'object',
+      properties: {
+        amount: { type: 'number' },
+        to: { type: 'string' },
+      },
+    },
+  },
+]);
+
+const response = await anthropic.messages.create({
+  model: 'claude-sonnet-4-6',
+  max_tokens: 1024,
+  tools,
+  messages: [{ role: 'user', content: 'Transfer $500 to Alice' }],
+});
+```
+</Tab>
+<Tab value="Vercel AI SDK">
+```typescript
+import { Veto } from 'veto-sdk';
+import { createVetoMiddleware } from 'veto-sdk/integrations/vercel-ai';
+import { generateText, tool, wrapLanguageModel } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+const veto = await Veto.init();
+const middleware = createVetoMiddleware(veto);
+
+const model = wrapLanguageModel({
+  model: openai('gpt-5.2'),
+  middleware,
+});
+
+const result = await generateText({
+  model,
+  tools: {
+    transfer_funds: tool({
+      description: 'Transfer money to an account',
+      parameters: z.object({
+        amount: z.number(),
+        to: z.string(),
+      }),
+      execute: async ({ amount, to }) => {
+        return { success: true, amount, to };
+      },
+    }),
+  },
+  prompt: 'Transfer $500 to Alice',
+});
+```
+</Tab>
+<Tab value="LangChain">
+```typescript
+import { Veto } from 'veto-sdk';
+import { createVetoLangChainMiddleware } from 'veto-sdk/integrations/langchain';
+import { createAgent } from '@langchain/core/agents';
+import { DynamicTool } from '@langchain/core/tools';
+
+const veto = await Veto.init();
+const middleware = createVetoLangChainMiddleware(veto);
+
+const tools = [
+  new DynamicTool({
+    name: 'transfer_funds',
+    description: 'Transfer money to an account',
+    func: async (input) => JSON.stringify({ success: true, ...JSON.parse(input) }),
+  }),
+];
+
+const agent = createAgent({
+  tools,
+  middleware: [middleware],
+});
+```
+
+See [LangChain integration](/docs/integrations/langchain) for ToolNode and callback patterns.
+</Tab>
+<Tab value="Python (OpenAI)">
 ```python
 import asyncio
+from openai import OpenAI
 from veto import Veto
-from veto.core.interceptor import ToolCallDeniedError
 
 async def main():
+    client = OpenAI()
     veto = await Veto.init()
 
-    tools = veto.wrap([{
-        "name": "transfer_funds",
-        "handler": lambda args: f"Transferred ${args['amount']} to {args['to']}",
-    }])
+    tools = veto.wrap([
+        {
+            "type": "function",
+            "function": {
+                "name": "transfer_funds",
+                "description": "Transfer money to an account",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "amount": {"type": "number"},
+                        "to": {"type": "string"},
+                    },
+                },
+            },
+        },
+    ])
 
-    # This one passes ($500 is under the $1000 limit)
-    result = await tools[0].handler({"amount": 500, "to": "Alice"})
-    print("Allowed:", result)
-
-    # This one gets blocked ($5000 exceeds the $1000 limit)
-    try:
-        await tools[0].handler({"amount": 5000, "to": "Bob"})
-    except ToolCallDeniedError as error:
-        print("Denied:", error.reason)
-
-    print("Stats:", veto.get_history_stats())
+    response = client.chat.completions.create(
+        model="gpt-5.2",
+        tools=tools,
+        messages=[{"role": "user", "content": "Transfer $500 to Alice"}],
+    )
 
 asyncio.run(main())
 ```
+</Tab>
+<Tab value="MCP">
+```typescript
+import { Veto } from 'veto-sdk';
 
-Run it:
+const veto = await Veto.init();
 
-```bash
-python demo.py
+// MCP tools use inputSchema — Veto auto-detects the format
+const tools = veto.wrap([
+  {
+    name: 'read_file',
+    description: 'Read a file from the filesystem',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+      },
+      required: ['path'],
+    },
+  },
+]);
 ```
 
+See [MCP integration](/docs/integrations/mcp) for full server setup.
 </Tab>
 </Tabs>
 
-Expected output:
+### 5. What a denied call looks like
 
+When the agent tries to violate a rule, Veto throws a `ToolCallDeniedError`:
+
+```typescript
+import { ToolCallDeniedError } from 'veto-sdk';
+
+try {
+  // Agent tries transfer_funds({ amount: 50000, to: "offshore-account" })
+  // This triggers the "limit-transfers" rule
+  await wrappedTool.handler({ amount: 50000, to: 'offshore-account' });
+} catch (error) {
+  if (error instanceof ToolCallDeniedError) {
+    error.toolName;          // "transfer_funds"
+    error.reason;            // "Amount 50000 exceeds limit of 10000"
+    error.callId;            // "tc_abc123"
+    error.validationResult;  // { decision: "deny", reason: "...", metadata: {...} }
+  }
+}
 ```
-Allowed: Transferred $500 to Alice
-Denied: Matched rule: Block large transfers
-Stats: { totalCalls: 2, allowedCalls: 1, deniedCalls: 1 }
+
+The agent receives the denial as a tool error and can adjust its behavior — feed the error back to the model so it retries with different arguments, throw to the caller, or degrade gracefully. See the [error handling guide](/docs/guides/error-handling) for framework-specific patterns.
+
+### 6. Go to production
+
+Everything above works locally — no account needed. When your agent goes to production, you'll want visibility into what it's doing: which tools it calls, which calls get denied, and the ability to require human approval for sensitive operations.
+
+Add an API key and the SDK switches to cloud mode automatically:
+
+```typescript
+const veto = await Veto.init({ apiKey: 'veto_...' });
+// Or set VETO_API_KEY environment variable — the SDK auto-detects
 ```
 
-That's it. Veto intercepted the tool call, evaluated the rule locally in ~1-5ms, and blocked it. No network calls, no API key.
+Get your API key at [runveto.com](https://runveto.com) (free tier available). Your existing YAML rules keep working — cloud mode adds capabilities on top:
 
-## What's next?
+| Capability | Local | Cloud |
+|------------|-------|-------|
+| YAML rule validation (~1-5ms) | Yes | Yes (cached locally) |
+| Real-time decision dashboard | — | Yes |
+| Human-in-the-loop approvals | — | Yes |
+| LLM-based semantic policies | — | Yes |
+| Decision analytics and audit log | — | Yes |
+| [Policy packs](/docs/rules/policy-packs) (`@veto/coding-agent`, `@veto/financial`, etc.) | — | Yes |
 
-- [Framework Examples](/docs/getting-started/examples) — use Veto with OpenAI, Anthropic, Vercel AI, MCP, and more
-- [SDK Modes](/docs/concepts/modes) — cloud mode for dashboards, approvals, and LLM validation
-- [YAML Rule Format](/docs/rules/yaml-format) — complete rule syntax reference
-- [CLI Reference](/docs/sdk/cli) — `veto compile`, `veto learn`, `veto test`
+The local rules you wrote in step 3 stay exactly the same. Cloud mode doesn't replace them — it extends what's possible.
+
+Need to self-host? The server is available at `ghcr.io/vulnzap/veto-server:latest` — see [SDK Modes](/docs/concepts/modes#self-hosted-mode).
+
+---
+
+## AI agent integration
+
+If you're using an AI coding agent (Claude Code, Cursor, OpenCode, Codex, etc.), paste this prompt to have it integrate Veto into your codebase:
+
+````markdown
+## Task: Integrate Veto SDK into this codebase
+
+Veto is the authorization layer for AI agents — it intercepts every tool call and validates
+it against rules before execution. The agent never knows the guardrail exists.
+
+### Instructions
+
+1. Read the full documentation: https://docs.runveto.com/llms.txt
+2. Install the SDK:
+   - TypeScript: `npm install veto-sdk`
+   - Python: `pip install veto`
+3. Initialize: `npx veto init` (creates `veto/` directory with config and rules)
+4. Find where tools are defined in this codebase and wrap them with `veto.wrap(tools)`
+5. Create sensible default rules in `veto/rules/default.yaml` based on the tools in use
+
+### Key integration pattern
+
+```typescript
+import { Veto } from 'veto-sdk';
+const veto = await Veto.init();
+const wrappedTools = veto.wrap(existingTools); // drop-in replacement
+```
+
+### Reference docs
+
+- Quick start: https://docs.runveto.com/docs/getting-started/quick-start
+- YAML rule format: https://docs.runveto.com/docs/rules/yaml-format
+- Framework-specific guides: https://docs.runveto.com/docs/integrations/openai-sdk
+  (also: anthropic-sdk, vercel-ai, langchain, langgraph, mcp, browser-use,
+   openai-agents, crewai, pydanticai, playwright, google-gemini)
+
+### Optional: enable cloud mode
+
+If you have a Veto API key, pass it to init for dashboard + approvals + LLM policies:
+```typescript
+const veto = await Veto.init({ apiKey: process.env.VETO_API_KEY });
+```
+````
+
+**What the agent will do:**
+
+1. Read the Veto docs at `docs.runveto.com/llms.txt`
+2. Install the SDK in your project
+3. Run `npx veto init` to scaffold the config directory
+4. Find your existing tool definitions and wrap them with `veto.wrap()`
+5. Generate default rules based on the tools it finds
+6. Optionally enable cloud mode if you provide an API key
+
+---
+
+## Common rules to start with
+
+Copy these into `veto/rules/default.yaml` as a starting point:
+
+```yaml title="veto/rules/default.yaml"
+rules:
+  # Block large financial transfers
+  - id: limit-transfers
+    name: Block large transfers
+    action: block
+    severity: critical
+    tools:
+      - transfer_funds
+      - send_payment
+      - create_invoice
+    conditions:
+      - field: arguments.amount
+        operator: greater_than
+        value: 10000
+
+  # Block dangerous URLs in browser tools
+  - id: block-dangerous-urls
+    name: Block suspicious URLs
+    action: block
+    severity: high
+    tools:
+      - navigate
+      - goto
+      - open_url
+    conditions:
+      - field: arguments.url
+        operator: matches
+        value: "(data:|javascript:|file://|localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)"
+
+  # Require approval for destructive actions
+  - id: approve-destructive
+    name: Require approval for destructive operations
+    action: require_approval
+    severity: high
+    tools:
+      - delete_file
+      - drop_table
+      - remove_user
+      - delete_repository
+
+  # Rate-limit tool calls per session (omit tools to apply to all)
+  - id: rate-limit-calls
+    name: Limit total tool calls per session
+    action: block
+    severity: medium
+    conditions:
+      - field: session.totalCalls
+        operator: greater_than
+        value: 100
+```
+
+See [YAML Rule Format](/docs/rules/yaml-format) for the full syntax and [Policy Packs](/docs/rules/policy-packs) for pre-built rule sets.
+
+## Next steps
+
+| Where to go | What you'll learn |
+|-------------|-------------------|
+| [YAML Rule Format](/docs/rules/yaml-format) | Full rule syntax — actions, conditions, condition groups, severity |
+| [Constraints Reference](/docs/concepts/constraints) | Every constraint type — ranges, regex, enums, arrays |
+| [Error Handling](/docs/guides/error-handling) | What to do when tools are denied — retry, degrade, inform |
+| [Policy Packs](/docs/rules/policy-packs) | Pre-built rule sets you can extend |
+| [SDK Modes](/docs/concepts/modes) | Local, cloud, and self-hosted mode explained |
+| [TypeScript SDK](/docs/sdk/typescript) | Full API reference |
+| [Python SDK](/docs/sdk/python) | Full API reference |

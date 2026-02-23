@@ -1,39 +1,49 @@
 # Veto
 
-> The authorization kernel for AI agents. Intercept, validate, and control every tool call. Veto sits between an AI agent and its tools — the agent never knows the guardrail exists.
+> Open-source authorization layer for AI agents. Intercept, validate, and control every tool call. Veto sits between an AI agent and its tools — the agent never knows the guardrail exists.
 
 You interact with Veto entirely through the SDK. Install it, wrap your tools, define your rules. The SDK auto-detects which mode to use:
 
 - **Local** (default): `Veto.init()` — YAML rules evaluated in-process, zero network calls
 - **Cloud** (recommended): `Veto.init({ apiKey: "veto_..." })` — dashboard, analytics, human-in-the-loop approvals, LLM validation
-- **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — same features as cloud, on your infrastructure
+- **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — server-side validation on your infrastructure, dashboard not included (`ghcr.io/vulnzap/veto-server:latest`)
 
-TypeScript SDK: `npm install veto-sdk` (v1.7.0)
-Python SDK: `pip install veto` (v0.7.0)
+TypeScript SDK: `npm install veto-sdk` (v1.9.0)
+Python SDK: `pip install veto` (v0.9.0)
 
 ## Getting Started
 
-- [What is Veto?](https://docs.runveto.com/docs): Overview, three SDK modes, framework compatibility table, quick setup
+- [What is Veto?](https://docs.runveto.com/docs): Overview, integration pattern, features, SDK modes, framework support for all 12 integrations
 - [Installation](https://docs.runveto.com/docs/getting-started/installation): Install TypeScript or Python SDK and initialize config
-- [Quick Start](https://docs.runveto.com/docs/getting-started/quick-start): End-to-end setup in 60 seconds with framework examples (OpenAI, Anthropic, Vercel AI SDK, MCP, Python)
+- [Quick Start](https://docs.runveto.com/docs/getting-started/quick-start): Manual setup (6 steps with framework examples for OpenAI, Anthropic, Vercel AI SDK, LangChain, Python, MCP) and AI agent integration (copy-paste prompt for Claude Code, Cursor, OpenCode, Codex). Includes ToolCallDeniedError handling, cloud mode upgrade path, and common starter rules.
 
 ## SDKs
 
-- [TypeScript SDK](https://docs.runveto.com/docs/sdk/typescript): Full API reference (v1.7.0) — Veto.init, wrap, wrapTool, exportDecisions, VetoCloudClient, error types, provider adapters, all exports
-- [Python SDK](https://docs.runveto.com/docs/sdk/python): Full API reference (v0.7.0) — Veto.init, wrap, wrap_tool, export_decisions, VetoCloudClient, error types
+- [TypeScript SDK](https://docs.runveto.com/docs/sdk/typescript): Full API reference (v1.9.0) — Veto.init, wrap, wrapTool, exportDecisions, VetoCloudClient, error types, provider adapters, all exports
+- [Python SDK](https://docs.runveto.com/docs/sdk/python): Full API reference (v0.9.0) — Veto.init, wrap, wrap_tool, export_decisions, VetoCloudClient, error types
 - [CLI](https://docs.runveto.com/docs/sdk/cli): Commands — init, compile (NL → YAML rules), learn (observe → generate), test (gap analysis), version
 
 ## Integrations
 
-- [LangChain](https://docs.runveto.com/docs/integrations/langchain): Middleware for createAgent, LangGraph ToolNode wrapper, callback handler — TypeScript and Python with partial denial support
-- [Vercel AI SDK](https://docs.runveto.com/docs/integrations/vercel-ai): Middleware for generateText and streamText with tool-call-boundary validation — TypeScript only
+- [Anthropic SDK](https://docs.runveto.com/docs/integrations/anthropic-sdk): Provider adapters (toAnthropic, fromAnthropicToolUse) and optional guard preflight checks — TypeScript only
 - [Browser-Use](https://docs.runveto.com/docs/integrations/browser-use): Controller/Tools wrapper for browser automation actions — TypeScript and Python
+- [CrewAI](https://docs.runveto.com/docs/integrations/crewai): Wraps BaseTool _run methods with validation; pass wrapped tools to Crew agents — Python only
+- [Google Gemini](https://docs.runveto.com/docs/integrations/google-gemini): Provider adapters (toGoogleTool, fromGoogleFunctionCall) for function calling — TypeScript only
+- [LangChain](https://docs.runveto.com/docs/integrations/langchain): Middleware for createAgent, LangGraph ToolNode wrapper, callback handler — TypeScript and Python with partial denial support
+- [LangGraph](https://docs.runveto.com/docs/integrations/langgraph): Wrap tools before ToolNode; detects LangChain tool objects, wraps func and invoke methods — TypeScript and Python
 - [MCP](https://docs.runveto.com/docs/integrations/mcp): Model Context Protocol tool definitions — auto-detected and converted transparently
+- [OpenAI Agents](https://docs.runveto.com/docs/integrations/openai-agents): Input, output, tool-input, and tool-output guardrail factories with tripwire hooks — TypeScript and Python
+- [OpenAI SDK](https://docs.runveto.com/docs/integrations/openai-sdk): Provider adapters (toOpenAI, fromOpenAIToolCall) and optional guard preflight checks — TypeScript only
+- [Playwright](https://docs.runveto.com/docs/integrations/playwright): wrapMCPTools validates browser automation actions (navigate, click, type, etc.) before forwarding to MCP — TypeScript only
+- [PydanticAI](https://docs.runveto.com/docs/integrations/pydanticai): Wrap tool handler functions; register wrapped handlers on PydanticAI agent or use validateToolCall directly — Python only
+- [Vercel AI SDK](https://docs.runveto.com/docs/integrations/vercel-ai): Middleware for generateText and streamText with tool-call-boundary validation — TypeScript only
 
 ## Rules & Policies
 
 - [YAML Rule Format](https://docs.runveto.com/docs/rules/yaml-format): Complete rule syntax — id, name, action (block/warn/log/allow/require_approval), tools, conditions, condition_groups (OR logic), description
 - [Validation Modes](https://docs.runveto.com/docs/rules/validation-modes): Local, cloud, API, custom (direct LLM), and kernel (Ollama) validation modes with configuration
+- [Policy Packs](https://docs.runveto.com/docs/rules/policy-packs): Built-in packs (@veto/coding-agent, @veto/financial, @veto/browser-automation, @veto/data-access) with extends and override syntax
+- [Time-Based Conditions](https://docs.runveto.com/docs/rules/time-conditions): within_hours/outside_hours operators with timezone and day-of-week filtering; overnight window support
 
 ## Concepts
 
@@ -41,6 +51,15 @@ Python SDK: `pip install veto` (v0.7.0)
 - [SDK Modes](https://docs.runveto.com/docs/concepts/modes): Local, cloud, and self-hosted mode detection, init options, operating modes (strict vs log)
 - [Constraints Reference](https://docs.runveto.com/docs/concepts/constraints): Every constraint type — number ranges, string validation, array bounds, presence checks, YAML condition operators
 - [Budget Constraints](https://docs.runveto.com/docs/concepts/budget-constraints): Per-session cost circuit breaker with fixed and dynamic costs
+
+## Guides
+
+- [Agent Identity & Role Scoping](https://docs.runveto.com/docs/guides/agent-identity): Scope YAML rules by agentId with include/exclude lists; pass agentId, userId, role in ValidationContext defaults
+- [Error Handling](https://docs.runveto.com/docs/guides/error-handling): ToolCallDeniedError properties; three strategies (feed to model, throw, degrade); framework patterns for OpenAI, Anthropic, LangChain
+- [Event Webhooks](https://docs.runveto.com/docs/guides/event-webhooks): Webhook notifications for deny, require_approval, budget_exceeded events; Slack, PagerDuty, generic, CEF formats
+- [Output Validation & Redaction](https://docs.runveto.com/docs/guides/output-validation): block/redact/log output_rules; regex redaction; standalone validateOutput API; built-in PII pattern constants
+- [Cross-Tool Sequence Constraints](https://docs.runveto.com/docs/guides/sequence-constraints): blocked_by (prevent exfiltration) and requires (enforce auth) — depend on prior session calls
+- [Browser Agents (Chrome Extensions)](https://docs.runveto.com/docs/guides/browser-agents): Use `veto-sdk/browser` and `Veto.fromRules()` for Chrome extensions, Manifest V3 service workers, and browser agents without Node.js filesystem dependencies
 
 ## Server API
 

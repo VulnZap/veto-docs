@@ -3,7 +3,12 @@ title: CrewAI Integration
 description: Use Veto with CrewAI tools to validate agent actions before execution.
 ---
 
-Veto integrates with [CrewAI](https://www.crewai.com/) by wrapping `BaseTool` instances. `veto.wrap()` detects CrewAI tools and wraps the `_run` method with validation.
+Veto integrates with [CrewAI](https://www.crewai.com/) by wrapping `BaseTool` instances.
+
+You can use either:
+
+- `wrap_crewai_tools(veto, tools)` for an explicit integration call, or
+- `veto.wrap([...])`, which auto-detects CrewAI `BaseTool` instances and delegates to the CrewAI integration.
 
 Python only — CrewAI is a Python framework.
 
@@ -19,6 +24,7 @@ pip install veto crewai
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 from veto import Veto
+from veto.integrations.crewai import wrap_crewai_tools
 
 veto = await Veto.init()
 
@@ -34,42 +40,38 @@ class TransferFundsTool(BaseTool):
     def _run(self, amount: float, to_account: str) -> str:
         return f"Transferred ${amount} to {to_account}"
 
-class BalanceInput(BaseModel):
-    account_id: str = Field(description="Account ID")
-
-class GetBalanceTool(BaseTool):
-    name: str = "get_balance"
-    description: str = "Check account balance"
-    args_schema: type[BaseModel] = BalanceInput
-
-    def _run(self, account_id: str) -> str:
-        return f"Balance for {account_id}: $5,000"
-
 # Wrap tools with Veto validation
-transfer_tool = TransferFundsTool()
-balance_tool = GetBalanceTool()
-safe_tools = veto.wrap([transfer_tool, balance_tool])
+tools = [TransferFundsTool()]
+safe_tools = wrap_crewai_tools(veto, tools)
+
+# Equivalent auto-detection path:
+# safe_tools = veto.wrap(tools)
 ```
 
 ## How it works
 
-`veto.wrap()` detects CrewAI tools by checking for the `_run` method (the execution method that `BaseTool` subclasses implement). The wrapper validates tool arguments against your policies before calling `_run`.
+For each `BaseTool`, Veto:
+
+1. Reads `tool.name`
+2. Builds an args dict using `args_schema.model_fields` + runtime args/kwargs
+3. Calls `await veto.guard(tool_name, args_dict)`
+4. Executes `_run()` (or `_arun()` when present) only if allowed
 
 ```
-CrewAI calls tool._run(**args)
-         |
-         v
-  Veto validates args
-         |
-    +----+----+
-    |         |
-  allow     deny
-    |         |
-    v         v
-  execute   ToolCallDeniedError
+CrewAI calls _run/_arun
+       |
+       v
+  veto.guard(...)
+       |
+  +----+----+
+  |         |
+allow     deny
+  |         |
+  v         v
+run tool  ToolCallDeniedError
 ```
 
-- **Allowed**: `_run()` executes normally
+- **Allowed**: `_run()` / `_arun()` executes normally
 - **Denied**: Raises `ToolCallDeniedError`
 
 ## Using with Crew
@@ -77,8 +79,9 @@ CrewAI calls tool._run(**args)
 ```python
 from crewai import Agent, Task, Crew
 
-# Wrap tools before passing to the agent
-safe_tools = veto.wrap([transfer_tool, balance_tool])
+# Wrap tools before passing to the agent (either API works)
+safe_tools = wrap_crewai_tools(veto, [TransferFundsTool()])
+# safe_tools = veto.wrap([TransferFundsTool()])
 
 agent = Agent(
     role="Financial Assistant",
@@ -115,4 +118,4 @@ denied_calls:   1
 
 - CrewAI requires Python < 3.14. If you're using Python 3.14+, use a compatible Python version.
 - The `args_schema` (Pydantic model) is used by CrewAI for input validation. Veto adds policy-level validation on top.
-- Both `_run()` and `run()` methods are wrapped when available.
+- Both `_run()` and `_arun()` methods are wrapped when available.

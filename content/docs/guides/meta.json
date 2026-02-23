@@ -1,3 +1,10 @@
 {
-  "pages": ["error-handling"]
+  "pages": [
+    "browser-agents",
+    "output-validation",
+    "event-webhooks",
+    "sequence-constraints",
+    "agent-identity",
+    "error-handling"
+  ]
 }

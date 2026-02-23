@@ -1,15 +1,15 @@
 # Veto
 
-> The authorization kernel for AI agents. Intercept, validate, and control every tool call. Veto sits between an AI agent and its tools — the agent never knows the guardrail exists.
+> Open-source authorization layer for AI agents. Intercept, validate, and control every tool call. Veto sits between an AI agent and its tools — the agent never knows the guardrail exists.
 
 You interact with Veto entirely through the SDK. Install it, wrap your tools, define your rules. The SDK auto-detects which mode to use:
 
 - **Local** (default): `Veto.init()` — YAML rules evaluated in-process, zero network calls
 - **Cloud** (recommended): `Veto.init({ apiKey: "veto_..." })` — dashboard, analytics, human-in-the-loop approvals, LLM validation
-- **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — same features as cloud, on your infrastructure
+- **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — server-side validation on your infrastructure, dashboard not included (`ghcr.io/vulnzap/veto-server:latest`)
 
-TypeScript SDK: `npm install veto-sdk` (v1.7.0)
-Python SDK: `pip install veto` (v0.7.0)
+TypeScript SDK: `npm install veto-sdk` (v1.9.0)
+Python SDK: `pip install veto` (v0.9.0)
 
 ---
 
@@ -456,7 +456,7 @@ Same as cloud, on your infrastructure.
 
 ---
 
-## TypeScript SDK (v1.7.0)
+## TypeScript SDK (v1.9.0)
 
 ### `Veto.init(options?)`
 
@@ -569,7 +569,7 @@ veto.clearApprovalPreferences();
 
 ---
 
-## Python SDK (v0.7.0)
+## Python SDK (v0.9.0)
 
 ### `Veto.init(options?)`
 
@@ -592,7 +592,7 @@ veto = await Veto.init(VetoOptions(
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `api_key` | `str` | `VETO_API_KEY` env | API key |
-| `base_url` | `str` | `"https://api.veto.dev"` | API base URL |
+| `base_url` | `str` | `"https://api.runveto.com"` | API base URL |
 | `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
 | `log_level` | `str` | `"info"` | Log level |
 | `session_id` | `str` | — | Session ID |
@@ -1050,3 +1050,803 @@ HITL requires **Team** plan or above.
 **Resolve errors:** 404 (not found), 410 (expired), 400 (already resolved).
 
 **SDK flow:** validate → `require_approval` → fire `onApprovalRequired` hook → poll every 2s → resolved or timeout (5 min default) → `ApprovalTimeoutError`.
+
+---
+
+## Policy Packs
+
+Veto ships with four built-in policy packs. Add an `extends` field in your YAML file to inherit one, then override or append rules.
+
+```yaml
+version: "1.0"
+extends: "@veto/coding-agent"
+
+rules:
+  # Override an inherited rule by reusing its id.
+  - id: coding-agent-block-dangerous-shell-commands
+    name: Override shell command block
+    action: block
+    tools: [run_shell]
+    conditions:
+      - field: arguments.command
+        operator: contains
+        value: shutdown
+
+  # Add a new rule alongside inherited rules.
+  - id: custom-prod-path-guard
+    name: Block writes to prod path
+    action: block
+    tools: [write_file]
+    conditions:
+      - field: arguments.path
+        operator: starts_with
+        value: /prod
+```
+
+### Merge behavior
+
+When `extends` is set:
+1. Veto loads the parent pack first.
+2. Veto merges your `rules` and `output_rules` on top.
+3. If your rule ID matches a pack rule ID, your rule fully replaces the pack rule.
+4. New rule IDs are appended after pack rules.
+
+If the pack name is invalid, Veto logs an error and skips that policy file.
+
+### Available packs
+
+**`@veto/coding-agent`** — block dangerous shell behavior and sensitive file writes.
+Rules: `coding-agent-block-dangerous-shell-commands`, `coding-agent-restrict-sensitive-file-writes`, `coding-agent-block-path-traversal-writes`
+
+**`@veto/financial`** — enforce transfer limits, currency controls, cumulative transfer caps.
+Rules: `financial-transfer-limit-per-transaction`, `financial-currency-allowlist`, `financial-cumulative-transfer-cap`
+
+**`@veto/browser-automation`** — reduce browser automation abuse from risky URLs, password field input, automatic submissions.
+Rules: `browser-automation-block-malicious-urls`, `browser-automation-block-password-input`, `browser-automation-block-form-submissions`
+
+**`@veto/data-access`** — protect database access with SQL injection blocking, row limits, output redaction.
+Input rules: `data-access-block-sql-injection-patterns`, `data-access-limit-row-count`
+Output rules: `data-access-redact-email`, `data-access-redact-ssn`
+
+---
+
+## Time-Based Conditions
+
+Veto YAML rules support two time-window operators for local deterministic checks:
+
+- `within_hours`: matches when the current call time is inside a configured window
+- `outside_hours`: matches when the current call time is outside a configured window
+
+Both operators are evaluated in-process (no network calls) using timezone-aware conversion.
+
+### Required value shape
+
+Use with `field: context.time` and an object value:
+
+```yaml
+conditions:
+  - field: context.time
+    operator: outside_hours
+    value:
+      start: "09:00"               # HH:MM (24-hour)
+      end: "17:00"                 # HH:MM (24-hour)
+      timezone: "America/New_York" # IANA timezone
+      days: ["mon", "tue", "wed", "thu", "fri"]  # Optional
+```
+
+`days` is optional: omitted means every day; provided means only listed days are in scope (`mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`).
+
+### Context fields
+
+- `context.time`: current timestamp (ISO string)
+- `context.day_of_week`: current lowercase day abbreviation (`sun`..`sat`)
+
+You can combine `context.day_of_week` with `in`, `not_in`, `equals`, `not_equals`.
+
+### Examples
+
+Block outside weekday business hours:
+
+```yaml
+rules:
+  - id: block-off-hours
+    name: Block outside business hours
+    action: block
+    tools: [wire_transfer]
+    conditions:
+      - field: context.time
+        operator: outside_hours
+        value:
+          start: "09:00"
+          end: "17:00"
+          timezone: "America/New_York"
+          days: ["mon", "tue", "wed", "thu", "fri"]
+```
+
+Overnight window (`start > end` crosses midnight):
+
+```yaml
+rules:
+  - id: overnight-maintenance-window
+    name: Allow restarts overnight
+    action: allow
+    tools: [restart_service]
+    conditions:
+      - field: context.time
+        operator: within_hours
+        value:
+          start: "22:00"
+          end: "06:00"
+          timezone: "UTC"
+```
+
+Weekend lockdown with `context.day_of_week`:
+
+```yaml
+rules:
+  - id: weekend-lockdown
+    action: block
+    tools: [deploy]
+    conditions:
+      - field: context.day_of_week
+        operator: in
+        value: ["sat", "sun"]
+```
+
+### Behavior notes
+
+- Timezone conversion uses `Intl.DateTimeFormat` (TypeScript) and `zoneinfo` (Python).
+- Invalid timezone values cause the condition to evaluate to `false` (no throw).
+- For overnight windows with `days`, early-morning times are evaluated against the previous day.
+
+---
+
+## Agent Identity & Role Scoping
+
+Veto rules can be scoped by agent identity, applying only to selected agents or everyone except selected agents.
+
+### Rule scoping with `agents`
+
+Include-only scope — rule applies only when `agentId` is in the list:
+
+```yaml
+rules:
+  - id: block-prod-deploy-for-bots
+    action: block
+    tools: [deploy]
+    agents:
+      - deploy-bot
+      - ci-agent
+```
+
+Exclusion scope — rule applies to everyone except listed agents:
+
+```yaml
+rules:
+  - id: require-review-except-auditor
+    action: require_approval
+    tools: [transfer_funds]
+    agents:
+      not:
+        - internal-auditor
+```
+
+No `agents` field: rule applies to all agents (default behavior).
+Agent scoping is enforced before condition checks.
+
+### Identity options in `Veto.init()`
+
+TypeScript:
+
+```typescript
+const veto = await Veto.init({
+  agentId: 'support-agent',
+  userId: 'user-123',
+  role: 'analyst',
+});
+```
+
+Python:
+
+```python
+veto = await Veto.init(VetoOptions(
+    agent_id="support-agent",
+    user_id="user-123",
+    role="analyst",
+))
+```
+
+These defaults are included in `ValidationContext` and can be overridden per guard call.
+
+### ValidationContext fields
+
+Custom validators receive: `agentId`/`agent_id`, `userId`/`user_id`, `role`.
+
+---
+
+## Output Validation & Redaction
+
+Veto can validate tool **outputs** after execution, before the result is returned to the AI model.
+
+Actions in priority order:
+1. `block` — blocks the output entirely
+2. `redact` — redacts matched substrings with a replacement string
+3. `log` — logs a warning and passes through unchanged
+
+### YAML example
+
+```yaml
+version: "1.0"
+rules: []
+output_rules:
+  - id: block-secrets
+    name: Block secret output
+    action: block
+    tools: [fetch_account]
+    output_conditions:
+      - field: output.secret
+        operator: contains
+        value: "token"
+
+  - id: redact-email
+    name: Redact email addresses
+    action: redact
+    tools: [fetch_account]
+    output_conditions:
+      - field: output.contact.email
+        operator: matches
+        value: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+    redact_with: "[REDACTED_EMAIL]"
+
+  - id: log-risky
+    name: Log suspicious text
+    action: log
+    tools: [fetch_account]
+    output_conditions:
+      - field: output.notes
+        operator: contains
+        value: "password"
+```
+
+`output_conditions` and `output_condition_groups` use the same operators as input `conditions`.
+
+### Standalone API
+
+TypeScript:
+
+```typescript
+const result = veto.validateOutput('fetch_account', {
+  contact: { email: 'alice@example.com' },
+});
+if (result.decision === 'block') throw new Error(result.reason);
+console.log(result.output); // { contact: { email: "[REDACTED_EMAIL]" } }
+```
+
+Python:
+
+```python
+result = veto.validate_output("fetch_account", {"contact": {"email": "alice@example.com"}})
+if result.decision == "block":
+    raise RuntimeError(result.reason)
+print(result.output)  # {"contact": {"email": "[REDACTED_EMAIL]"}}
+```
+
+### Built-in pattern constants
+
+Veto ships common regex constants for output redaction (not auto-applied — use explicitly in `output_rules`):
+SSN, credit card, OpenAI API key, GitHub API key, AWS API key, email, US phone.
+
+---
+
+## Cross-Tool Sequence Constraints
+
+Sequence constraints let a rule depend on prior calls in the session, not just the current tool arguments.
+
+### `blocked_by`
+
+Trigger the rule when a matching historical call exists:
+
+```yaml
+rules:
+  - id: prevent-data-exfiltration
+    name: Block send after secret read
+    action: block
+    tools: [send_email, upload_file]
+    blocked_by:
+      - tool: read_file
+        conditions:
+          - field: arguments.path
+            operator: starts_with
+            value: "/etc/secrets"
+```
+
+### `requires`
+
+Trigger the rule when a required historical call is missing:
+
+```yaml
+rules:
+  - id: require-auth-before-transfer
+    name: Require recent auth
+    action: block
+    tools: [transfer_funds]
+    requires:
+      - tool: verify_identity
+        within: 300    # seconds (optional)
+```
+
+### Matching behavior
+
+- `blocked_by`: OR semantics — any matching entry satisfies the condition.
+- `requires`: any missing required entry triggers the rule.
+- Denied historical calls do not satisfy `requires`.
+- History is bounded (default 100 entries); evicted entries cannot satisfy checks.
+- Currently enforced in local YAML validation mode.
+
+---
+
+## Event Webhooks
+
+Veto emits webhook notifications after validation outcomes.
+
+Supported event types: `deny`, `require_approval`, `budget_exceeded`.
+
+### Configuration
+
+```yaml
+events:
+  webhook:
+    url: "https://hooks.example.com/veto"
+    on: ["deny", "require_approval", "budget_exceeded"]
+    min_severity: "medium"   # critical | high | medium | low | info
+    format: "generic"        # slack | pagerduty | generic | cef
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `url` | Yes | Webhook endpoint receiving HTTP POST |
+| `on` | Yes | Event types to emit |
+| `min_severity` | No | Minimum severity threshold (`info` default) |
+| `format` | No | Payload adapter (`generic` default) |
+
+### Formats
+
+**`slack`**: Block Kit JSON (`text` + `blocks`) with tool, decision, severity, rule ID, reason, timestamp.
+
+**`pagerduty`**: Events API v2 payload with `event_action: "trigger"`, `dedup_key`, `payload.summary`, `payload.severity`, `payload.custom_details`.
+
+**`generic`** (default):
+
+```json
+{
+  "event_type": "deny",
+  "tool_name": "send_email",
+  "arguments": { "to": "vendor@example.com" },
+  "decision": "deny",
+  "reason": "Matched rule: deny-external-email",
+  "rule_id": "deny-external-email",
+  "severity": "high",
+  "timestamp": "2026-02-22T10:00:00.000Z"
+}
+```
+
+**`cef`**: Common Event Format string (`CEF:0|...`) for SIEM pipelines.
+
+### Delivery behavior
+
+- Fire-and-forget (async). Validation responses are never blocked by webhook delivery or failures.
+- Errors are logged as warnings only.
+
+---
+
+## Error Handling
+
+When Veto blocks a tool call, it throws `ToolCallDeniedError`.
+
+### ToolCallDeniedError properties
+
+TypeScript: `toolName`, `callId`, `reason`, `validationResult`, `message`
+Python: `tool_name`, `call_id`, `reason`, `validation_result`
+
+### Three handling strategies
+
+| Strategy | When to use |
+|----------|-------------|
+| **Feed back to model** | Let the AI adapt — return denial as a tool result so the model retries |
+| **Throw to caller** | Hard stop — let the error propagate and show the user an error message |
+| **Graceful degradation** | Catch, log, continue with a fallback |
+
+### Feed back to model (OpenAI)
+
+```typescript
+try {
+  const result = await wrappedTool.handler(args);
+  messages.push({ role: 'tool', tool_call_id: toolCall.id, content: String(result) });
+} catch (error) {
+  if (error instanceof ToolCallDeniedError) {
+    messages.push({
+      role: 'tool',
+      tool_call_id: toolCall.id,
+      content: `DENIED: ${error.reason}. Please try a different approach.`,
+    });
+  }
+}
+```
+
+### Feed back to model (Anthropic)
+
+```typescript
+toolResults.push({
+  type: 'tool_result',
+  tool_use_id: block.id,
+  content: `DENIED: ${error.reason}. Please adjust your approach.`,
+  is_error: true,  // tells Claude the call failed
+});
+```
+
+### Log mode: test without blocking
+
+```typescript
+// veto.config.yaml: mode: "log"
+const veto = await Veto.init();
+// Denied calls execute but are flagged in history
+```
+
+### Other error types
+
+| Error | When | Key properties |
+|-------|------|----------------|
+| `ToolCallDeniedError` | Tool call blocked | `toolName`, `reason`, `validationResult` |
+| `BudgetExceededError` | Budget limit reached | `spent`, `limit`, `remaining`, `toolName`, `toolCost` |
+| `ApprovalTimeoutError` | Human approval timed out | `approvalId`, `timeoutMs` |
+
+### Best practices
+
+1. Always handle `ToolCallDeniedError` — unhandled denials crash your agent
+2. Feed denials back to the model; it can adapt (lower amount, ask user, use different tool)
+3. Use `is_error: true` (Anthropic) or a clear error string (OpenAI) so the model knows the call failed
+4. Don't retry with identical arguments — they'll be denied again
+5. Use log mode first to test policies against real traffic before strict mode
+
+---
+
+## OpenAI SDK Integration
+
+Veto integrates with OpenAI function calling via provider adapters. TypeScript only.
+
+```typescript
+import { toOpenAI, fromOpenAIToolCall } from 'veto-sdk/providers';
+
+const openAITools = vetoTools.map(toOpenAI);
+
+const response = await client.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages,
+  tools: openAITools,
+});
+
+for (const toolCall of response.choices[0]?.message.tool_calls ?? []) {
+  const vetoCall = fromOpenAIToolCall(toolCall);
+
+  // Optional preflight check (no execution, no throw)
+  const guard = await veto.guard(vetoCall.name, vetoCall.arguments, { sessionId, agentId });
+  if (guard.decision !== 'allow') continue;
+
+  // Execution-time enforcement via veto.wrap(...)
+}
+```
+
+| Function | Purpose |
+|----------|---------|
+| `toOpenAI(toolDef)` | Convert Veto tool definition into OpenAI `ChatCompletionTool` format |
+| `fromOpenAIToolCall(toolCall)` | Convert OpenAI tool call into normalized `ToolCall` format |
+
+---
+
+## Anthropic SDK Integration
+
+Veto integrates with Anthropic Messages API tool use via provider adapters. TypeScript only.
+
+```typescript
+import { toAnthropic, fromAnthropicToolUse } from 'veto-sdk/providers';
+
+const anthropicTools = vetoTools.map(toAnthropic);
+
+const response = await client.messages.create({ model: 'claude-sonnet-4-20250514', tools: anthropicTools, ... });
+
+for (const block of response.content) {
+  if (block.type !== 'tool_use') continue;
+  const vetoCall = fromAnthropicToolUse(block);
+
+  const guard = await veto.guard(vetoCall.name, vetoCall.arguments);
+  if (guard.decision !== 'allow') continue;
+}
+```
+
+| Function | Purpose |
+|----------|---------|
+| `toAnthropic(toolDef)` | Convert Veto tool definition into Anthropic tool format |
+| `fromAnthropicToolUse(toolUse)` | Convert Anthropic `tool_use` block into normalized `ToolCall` format |
+
+---
+
+## Google Gemini Integration
+
+Veto integrates with Google Gemini function calling via provider adapters. TypeScript only.
+
+```typescript
+import { toGoogleTool, fromGoogleFunctionCall } from 'veto-sdk/providers';
+
+const googleTool = toGoogleTool(vetoTools);
+
+const response = await genai.models.generateContent({
+  model: 'gemini-2.0-flash',
+  contents: [...],
+  config: { tools: [{ functionDeclarations: googleTool.functionDeclarations }] },
+});
+
+for (const part of response.candidates?.[0]?.content?.parts ?? []) {
+  if (!part.functionCall) continue;
+  const vetoCall = fromGoogleFunctionCall(part.functionCall);
+
+  const guard = await veto.guard(vetoCall.name, vetoCall.arguments);
+  if (guard.decision !== 'allow') continue;
+}
+```
+
+| Function | Purpose |
+|----------|---------|
+| `toGoogleTool(toolDefs)` | Convert Veto tool definitions into Gemini `functionDeclarations` |
+| `fromGoogleFunctionCall(functionCall)` | Convert Gemini function call into normalized `ToolCall` format |
+
+---
+
+## LangGraph Integration
+
+Wrap tools with `veto.wrap()` before passing to `ToolNode`. TypeScript and Python.
+
+```typescript
+import { Veto } from 'veto-sdk';
+import { ToolNode } from '@langchain/langgraph/prebuilt';
+
+const veto = await Veto.init();
+const safeTools = veto.wrap(tools);  // detects LangChain tool objects, wraps func + invoke
+const toolNode = new ToolNode(safeTools);
+
+const graph = new StateGraph(...)
+  .addNode("agent", agentNode)
+  .addNode("tools", toolNode)
+  .addEdge("agent", "tools")
+  .addEdge("tools", "agent");
+```
+
+```python
+from veto import Veto
+from langgraph.prebuilt import ToolNode
+
+veto = await Veto.init()
+safe_tools = veto.wrap([transfer_funds, send_notification])
+tool_node = ToolNode(safe_tools)
+```
+
+- Allowed: tool executes normally and returns to the graph
+- Denied: `ToolCallDeniedError` raised, caught by graph's error handling
+
+For batch validation with partial denial support, use `createVetoToolNode` / `create_veto_tool_node`. See [LangChain Integration](/docs/integrations/langchain#langgraph-toolnode).
+
+---
+
+## OpenAI Agents Integration
+
+Veto integrates with OpenAI Agents guardrails at four levels: input, output, tool-input, tool-output. TypeScript and Python.
+
+```python
+from veto.integrations.openai_agents import (
+    create_veto_input_guardrail,
+    create_veto_output_guardrail,
+    create_veto_tool_guardrails,
+)
+
+veto = await Veto.init(VetoOptions(api_key="your-key"))
+tool_input_guardrail, tool_output_guardrail = create_veto_tool_guardrails(veto)
+
+@function_tool(
+    tool_input_guardrails=[tool_input_guardrail],
+    tool_output_guardrails=[tool_output_guardrail],
+)
+async def send_email(to: str, body: str) -> str:
+    return f"sent to {to}"
+
+agent = Agent(
+    name="Guarded Agent",
+    tools=[send_email],
+    input_guardrails=[create_veto_input_guardrail(veto)],
+    output_guardrails=[create_veto_output_guardrail(veto)],
+)
+```
+
+### Guardrail mapping
+
+| Guardrail | What Veto calls |
+|-----------|----------------|
+| Input | `veto.guard("agent_input", {"input": ...})` |
+| Output | `veto.validate_output("agent_output", str(output))` |
+| Tool input | `veto.guard(tool_name, parsed_args)` |
+| Tool output | `veto.validate_output(tool_name, str(output))` |
+
+Only `deny` decisions trigger input/tool-input tripwires. TypeScript integration is dependency-free and returns plain objects.
+
+### Exports
+
+TypeScript: `import { createVetoInputGuardrail, createVetoOutputGuardrail, createVetoToolGuardrails } from 'veto-sdk/integrations/openai-agents'`
+Python: `from veto.integrations.openai_agents import create_veto_input_guardrail, create_veto_output_guardrail, create_veto_tool_guardrails`
+
+---
+
+## Playwright Integration
+
+Veto works with Playwright MCP by validating browser automation actions before forwarding to the MCP server. TypeScript only.
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+const mcpTools = await client.messages.listTools({ server: 'playwright' });
+
+const { tools, callTool } = veto.wrapMCPTools(
+  mcpTools,
+  { callTool: (args) => client.messages.callTool({ server: 'playwright', ...args }) }
+);
+
+// Use callTool instead of direct MCP calls
+await callTool({ name: 'browser_navigate', arguments: { url: 'https://example.com' } });
+```
+
+`wrapMCPTools` returns:
+- `tools`: original MCP definitions (pass to AI model as-is)
+- `callTool`: validated function that checks arguments before forwarding to MCP server
+
+### Common Playwright MCP tool names
+
+`browser_navigate`, `browser_click`, `browser_type`, `browser_snapshot`, `browser_screenshot`, `browser_go_back`, `browser_go_forward`, `browser_wait`, `browser_press_key`, `browser_select_option`
+
+### YAML rules example
+
+```yaml
+rules:
+  - id: block-dangerous-urls
+    action: block
+    tools: [browser_navigate]
+    conditions:
+      - field: arguments.url
+        operator: matches
+        value: "^https?://(.*\\.)?(malware|phishing|darkweb)\\."
+
+  - id: block-file-urls
+    action: block
+    tools: [browser_navigate]
+    conditions:
+      - field: arguments.url
+        operator: starts_with
+        value: "file://"
+```
+
+---
+
+## PydanticAI Integration
+
+Veto integrates with PydanticAI by wrapping tool handler functions. Python only.
+
+```python
+from veto import Veto
+from pydantic_ai import Agent
+
+veto = await Veto.init()
+
+class MockTool:
+    def __init__(self, name, description, handler):
+        self.name = name
+        self.description = description
+        self.handler = handler
+
+tools = [MockTool("transfer_funds", "Transfer money", handler=lambda args: transfer_impl(...))]
+wrapped = veto.wrap(tools)
+
+agent = Agent('openai:gpt-4o')
+
+@agent.tool_plain
+async def transfer_funds(amount: float, to_account: str) -> str:
+    """Transfer money between accounts."""
+    result = await wrapped[0].handler({"amount": amount, "to_account": to_account})
+    return str(result)
+```
+
+`veto.wrap()` detects the `handler` attribute and wraps it with validation.
+
+### Alternative: validate inside tool functions
+
+```python
+result = await veto.validate_tool_call(
+    tool_name="transfer_funds",
+    arguments={"amount": amount, "to_account": to_account},
+)
+if not result.allowed:
+    raise ToolCallDeniedError("transfer_funds", result.original_call.id, result.validation_result)
+```
+
+---
+
+## CrewAI Integration
+
+Veto integrates with CrewAI by wrapping `BaseTool` instances. Python only.
+
+```python
+from crewai.tools import BaseTool
+from pydantic import BaseModel, Field
+from veto import Veto
+
+veto = await Veto.init()
+
+class TransferInput(BaseModel):
+    amount: float = Field(description="Amount to transfer")
+    to_account: str = Field(description="Destination account")
+
+class TransferFundsTool(BaseTool):
+    name: str = "transfer_funds"
+    description: str = "Transfer money between accounts"
+    args_schema: type[BaseModel] = TransferInput
+
+    def _run(self, amount: float, to_account: str) -> str:
+        return f"Transferred ${amount} to {to_account}"
+
+safe_tools = veto.wrap([TransferFundsTool(), GetBalanceTool()])
+
+# Pass to Crew agent
+agent = Agent(role="Financial Assistant", tools=safe_tools)
+```
+
+`veto.wrap()` detects CrewAI tools by the `_run` method and wraps it with validation. Both `_run()` and `run()` are wrapped when available.
+
+Notes: CrewAI requires Python < 3.14. The `args_schema` Pydantic model handles input coercion; Veto adds policy validation on top.
+
+---
+
+## Browser Agents (Chrome Extensions)
+
+Use the browser entry point for Chrome extensions, browser-based agents, and Manifest V3 service workers:
+
+```typescript
+import { Veto, wrapActions } from 'veto-sdk/browser';
+```
+
+`Veto.fromRules()` accepts plain JavaScript rule objects. No filesystem or YAML loading is required in browser runtimes.
+
+```typescript
+const veto = Veto.fromRules({
+  mode: 'strict',
+  rules: [
+    {
+      id: 'block-sensitive-urls',
+      name: 'Block banking domains',
+      enabled: true,
+      severity: 'critical',
+      action: 'block',
+      tools: ['navigate', 'goto', 'click_link'],
+      conditions: [
+        {
+          field: 'arguments.url',
+          operator: 'matches',
+          value: '.*\\.(bank|chase|wellsfargo)\\.com.*'
+        }
+      ]
+    }
+  ]
+});
+```
+
+Works in:
+- Manifest V3 service workers
+- content scripts
+- web workers
+
+Reference guide: https://docs.runveto.com/docs/guides/browser-agents

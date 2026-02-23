@@ -1,0 +1,117 @@
+---
+title: Output Validation & Redaction
+description: Validate and transform tool outputs before they are returned to the model.
+---
+
+Veto can validate tool **outputs** after execution, before the result is returned to the AI model.
+
+This lets you:
+- block sensitive outputs entirely
+- redact sensitive substrings from output fields
+- log risky output patterns without blocking
+
+## How it works
+
+1. Your tool executes normally.
+2. Veto evaluates matching `output_rules` for that tool.
+3. Veto applies actions in this order:
+   - `block` wins over everything
+   - `redact` runs if no `block` rule matched
+   - `log` only records a warning and passes output through
+4. The transformed (or blocked) result is returned.
+
+## YAML example
+
+```yaml
+version: "1.0"
+rules: []
+output_rules:
+  - id: block-secrets
+    name: Block secret output
+    action: block
+    tools: [fetch_account]
+    description: Output contains a secret token
+    output_conditions:
+      - field: output.secret
+        operator: contains
+        value: "token"
+
+  - id: redact-email
+    name: Redact email addresses
+    action: redact
+    tools: [fetch_account]
+    output_conditions:
+      - field: output.contact.email
+        operator: matches
+        value: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+    redact_with: "[REDACTED_EMAIL]"
+
+  - id: log-risky
+    name: Log suspicious text
+    action: log
+    tools: [fetch_account]
+    output_conditions:
+      - field: output.notes
+        operator: contains
+        value: "password"
+```
+
+`output_conditions` and `output_condition_groups` use the same operators as input `conditions` (`matches`, `contains`, `equals`, `greater_than`, etc.).
+
+## Standalone API
+
+Use standalone output validation if you need to validate data outside wrapped tool execution.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const result = veto.validateOutput('fetch_account', {
+  contact: { email: 'alice@example.com' },
+});
+
+if (result.decision === 'block') {
+  throw new Error(result.reason);
+}
+
+console.log(result.output);
+// { contact: { email: "[REDACTED_EMAIL]" } }
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+result = veto.validate_output(
+    "fetch_account",
+    {"contact": {"email": "alice@example.com"}},
+)
+
+if result.decision == "block":
+    raise RuntimeError(result.reason)
+
+print(result.output)
+# {"contact": {"email": "[REDACTED_EMAIL]"}}
+```
+
+</Tab>
+</Tabs>
+
+## Safety and precedence
+
+- `block` takes precedence over `redact` when multiple output rules match.
+- Regex conditions/redactions are safety-checked (max length 256 + ReDoS guard).
+- Unsafe regex patterns are rejected and not applied.
+
+## Built-in pattern constants (reference only)
+
+Veto ships common regex constants for output redaction policies:
+- SSN
+- credit card
+- OpenAI API key
+- GitHub API key
+- AWS API key
+- email
+- US phone
+
+These are **not auto-applied**; use them explicitly in your `output_rules`.

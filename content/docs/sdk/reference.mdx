@@ -27,6 +27,10 @@ pip install veto[all]
 </Tab>
 </Tabs>
 
+Wrapped execution enforces both:
+- input `rules` before tool execution
+- output `output_rules` after tool execution, before returning tool output
+
 ## `Veto.init(options?)`
 
 <Tabs items={["TypeScript", "Python"]}>
@@ -38,6 +42,11 @@ import { Veto } from 'veto-sdk';
 const vetoLocal = await Veto.init();
 const vetoCloud = await Veto.init({ apiKey: 'veto_...' });
 const vetoSelfHosted = await Veto.init({ endpoint: 'https://veto.internal.example.com' });
+const vetoWithIdentity = await Veto.init({
+  agentId: 'support-agent',
+  userId: 'user-123',
+  role: 'analyst',
+});
 ```
 
 </Tab>
@@ -49,7 +58,72 @@ from veto import Veto, VetoOptions
 veto_local = await Veto.init()
 veto_cloud = await Veto.init(VetoOptions(api_key='veto_...'))
 veto_self_hosted = await Veto.init(VetoOptions(base_url='https://veto.internal.example.com'))
+veto_with_identity = await Veto.init(
+    VetoOptions(
+        agent_id='support-agent',
+        user_id='user-123',
+        role='analyst',
+    )
+)
 ```
+
+</Tab>
+</Tabs>
+
+Common identity options:
+
+- TypeScript: `sessionId`, `agentId`, `userId`, `role`
+- Python: `session_id`, `agent_id`, `user_id`, `role`
+
+These identity values are propagated through `ValidationContext` and guard/cloud validation context payloads.
+
+## `veto.validateOutput(toolName, output)` / `veto.validate_output(tool_name, output)`
+
+Run standalone output validation/redaction without executing a wrapped tool.
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+
+```typescript
+const result = veto.validateOutput('fetch_account', {
+  contact: { email: 'alice@example.com' },
+});
+
+if (result.decision === 'block') {
+  throw new Error(result.reason);
+}
+
+console.log(result.output);
+```
+
+`OutputValidationResult` fields:
+- `decision`: `'allow' | 'block'`
+- `output`: transformed output (or `null` when blocked)
+- `reason?`: block reason
+- `matchedRuleIds`: `string[]`
+- `redactions`: `number`
+
+</Tab>
+<Tab value="Python">
+
+```python
+result = veto.validate_output(
+    "fetch_account",
+    {"contact": {"email": "alice@example.com"}},
+)
+
+if result.decision == "block":
+    raise RuntimeError(result.reason)
+
+print(result.output)
+```
+
+`OutputValidationResult` fields:
+- `decision`: `'allow' | 'block'`
+- `output`: transformed output (or `None` when blocked)
+- `reason`: `str | None`
+- `matched_rule_ids`: `list[str] | None`
+- `redactions`: `int`
 
 </Tab>
 </Tabs>
@@ -105,7 +179,12 @@ import { Veto, type GuardResult } from 'veto-sdk';
 const result: GuardResult = await veto.guard(
   'wire_transfer',
   { amount: 25000 },
-  { sessionId: 'session-42', agentId: 'agent-7' }
+  {
+    sessionId: 'session-42',
+    agentId: 'agent-7',
+    userId: 'user-99',
+    role: 'admin',
+  }
 );
 
 if (result.decision === 'require_approval') {
@@ -131,6 +210,8 @@ result: GuardResult = await veto.guard(
     {"amount": 25000},
     session_id="session-42",
     agent_id="agent-7",
+    user_id="user-99",
+    role="admin",
 )
 
 if result.decision == "require_approval":
@@ -153,7 +234,7 @@ if result.decision == "require_approval":
 - Records guard checks in history.
 - Returns deny/approval outcomes instead of throwing `ToolCallDeniedError`.
 - In log mode, `guard()` still returns real policy verdicts (it does not convert denies to allows).
-- Per-call session/agent overrides are supported (`sessionId`/`agentId` in TypeScript, `session_id`/`agent_id` in Python).
+- Per-call identity overrides are supported (`sessionId`/`agentId`/`userId`/`role` in TypeScript, `session_id`/`agent_id`/`user_id`/`role` in Python).
 
 ## `veto.getHistoryStats()` / `veto.get_history_stats()`
 
@@ -449,7 +530,7 @@ import { VetoCloudClient } from 'veto-sdk';
 const client = new VetoCloudClient({
   config: {
     apiKey: 'veto_abc123...',
-    baseUrl: 'https://api.veto.dev',
+    baseUrl: 'https://api.runveto.com',
     timeout: 30000,
     retries: 2,
     retryDelay: 1000,
@@ -467,7 +548,7 @@ from veto.cloud.client import VetoCloudClient, VetoCloudConfig
 client = VetoCloudClient(
     VetoCloudConfig(
         api_key='veto_abc123...',
-        base_url='https://api.veto.dev',
+        base_url='https://api.runveto.com',
         timeout=30000,
         retries=2,
         retry_delay=1000,

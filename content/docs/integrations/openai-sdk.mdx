@@ -1,0 +1,96 @@
+---
+title: OpenAI SDK Integration
+description: Use Veto with OpenAI function calling via provider adapters and optional guard preflight checks.
+---
+
+Veto integrates with OpenAI function calling by converting tool definitions to OpenAI format and mapping tool calls back into Veto's normalized format.
+
+TypeScript only.
+
+## Installation
+
+```bash
+npm install veto-sdk openai
+```
+
+## Quick start
+
+```typescript
+import OpenAI from 'openai';
+import { Veto, ToolCallDeniedError } from 'veto-sdk';
+import { toOpenAI, fromOpenAIToolCall } from 'veto-sdk/providers';
+
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const veto = await Veto.init();
+
+const vetoTools = [
+  {
+    name: 'transfer_funds',
+    description: 'Transfer money between bank accounts',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        amount: { type: 'number' },
+        from_account: { type: 'string' },
+        to_account: { type: 'string' },
+      },
+      required: ['amount', 'from_account', 'to_account'],
+    },
+  },
+];
+
+const openAITools = vetoTools.map(toOpenAI);
+
+const response = await client.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Transfer $500 from ACC-1 to ACC-2' }],
+  tools: openAITools,
+});
+
+for (const toolCall of response.choices[0]?.message.tool_calls ?? []) {
+  const vetoCall = fromOpenAIToolCall(toolCall);
+
+  // Optional preflight check (no execution, no ToolCallDeniedError throw)
+  const guard = await veto.guard(vetoCall.name, vetoCall.arguments, {
+    sessionId: 'openai-session-1',
+    agentId: 'openai-agent',
+  });
+  if (guard.decision !== 'allow') {
+    console.log(`Blocked at preflight: ${guard.decision} ${guard.reason ?? ''}`);
+    continue;
+  }
+
+  // Execution-time enforcement
+  const wrapped = veto.wrap([{
+    name: vetoCall.name,
+    handler: async (args: Record<string, unknown>) => ({ ok: true, args }),
+  }]);
+
+  try {
+    const result = await wrapped[0].handler(vetoCall.arguments);
+    console.log(result);
+  } catch (error) {
+    if (error instanceof ToolCallDeniedError) {
+      console.log(`Blocked by policy: ${error.reason}`);
+    } else {
+      throw error;
+    }
+  }
+}
+```
+
+## Adapter functions
+
+| Function | Purpose |
+|----------|---------|
+| `toOpenAI(toolDef)` | Convert Veto/OpenAI-like tool definition into OpenAI's `ChatCompletionTool` format |
+| `fromOpenAIToolCall(toolCall)` | Convert an OpenAI tool call into normalized `ToolCall` format for Veto |
+
+Both are exported from `veto-sdk/providers`.
+
+## Runnable example
+
+See the end-to-end example in:
+
+- `packages/sdk/examples/openai-sdk/openai_agent.ts`
+
