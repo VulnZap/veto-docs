@@ -1,0 +1,168 @@
+---
+title: Browser Agents (Chrome Extensions)
+description: Add Veto guardrails to browser-native agents in Chrome extensions and Manifest V3 service workers.
+---
+
+Browser agents can execute high-impact actions inside authenticated user sessions. Veto lets you enforce deterministic controls before each action runs.
+
+## Why browser agents need guardrails
+
+Browser agents have access to:
+- authenticated cookies and active enterprise sessions
+- internal dashboards and production admin panels
+- form fields that may contain PII, credentials, or financial data
+
+This creates real abuse paths:
+- prompt injection that steers an agent to phishing or exfiltration pages
+- over-permissioned extensions that can navigate and submit on any origin
+- compromised prompts/workflows that automate risky actions at scale
+
+The user initiating an agent does **not** imply unrestricted access to every site and field.
+
+## Install and setup (Chrome extension)
+
+```bash
+npm install veto-sdk
+```
+
+```json
+{
+  "manifest_version": 3,
+  "name": "My Agent",
+  "version": "1.0.0",
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  }
+}
+```
+
+Use the browser entry point:
+
+```typescript
+import { Veto, wrapActions } from 'veto-sdk/browser';
+```
+
+## Inline rules with fromRules()
+
+`fromRules()` takes plain JavaScript rule objects. No filesystem layout, no YAML parsing, no `npx veto init`.
+
+```typescript
+const veto = Veto.fromRules({
+  mode: 'strict',
+  rules: [
+    {
+      id: 'block-sensitive-urls',
+      name: 'Block banking domains',
+      enabled: true,
+      severity: 'critical',
+      action: 'block',
+      tools: ['navigate', 'goto', 'click_link'],
+      conditions: [
+        {
+          field: 'arguments.url',
+          operator: 'matches',
+          value: '.*\\.(bank|chase|wellsfargo)\\.com.*'
+        }
+      ]
+    }
+  ]
+});
+```
+
+## Example: block sensitive URL navigation
+
+```typescript
+const decision = await veto.guard('navigate', { url: nextUrl });
+if (decision.decision === 'deny') {
+  console.warn(`Blocked: ${decision.reason}`);
+  return;
+}
+await page.goto(nextUrl);
+```
+
+## Example: block PII in form submissions
+
+```typescript
+const veto = Veto.fromRules({
+  rules: [
+    {
+      id: 'block-ssn-input',
+      name: 'Block SSN submission',
+      enabled: true,
+      severity: 'high',
+      action: 'block',
+      tools: ['type', 'fill_form', 'submit'],
+      conditions: [
+        {
+          field: 'arguments.value',
+          operator: 'matches',
+          value: '\\b\\d{3}-\\d{2}-\\d{4}\\b'
+        }
+      ]
+    }
+  ]
+});
+```
+
+## Example: rate-limit actions per session
+
+```typescript
+const veto = Veto.fromRules({
+  rules: [],
+  budget: { max: 200, currency: 'USD' },
+  costs: {
+    navigate: 1,
+    click: 1,
+    type: 2,
+    submit: 5
+  }
+});
+
+const safeActions = wrapActions(veto, {
+  navigate: (args) => page.goto(args.url as string),
+  click: (args) => page.click(args.selector as string),
+  type: (args) => page.type(args.selector as string, args.text as string),
+});
+```
+
+## Manifest V3 service worker compatibility
+
+`fromRules()` is compatible with:
+- Manifest V3 background service workers
+- content scripts
+- web workers
+
+Reason: browser setup is object-based, not filesystem-based.
+
+## Bundle size notes
+
+- Browser entry bundle target: `<15KB` minified + gzip
+- Core deterministic validation logic is small and can be used independently in constrained environments
+
+## Misconception: "Architecture mismatch"
+
+Reality: `guard(toolName, args)` is the universal API. It accepts any tool/action abstraction as long as it can be represented as `{ name, args }`.
+
+`wrap()` and `wrapActions()` are convenience layers. They are not required, and they are not coupled to LangChain.
+
+## Misconception: "Service workers are incompatible"
+
+Reality: browser usage does not require Node.js filesystem APIs. Rules are passed as JavaScript objects at runtime.
+
+That means no YAML loader dependency, no local rules directory requirements, and no Node-only initialization path in service workers.
+
+## Misconception: "Wrong threat model"
+
+Reality: browser agents are a high-value guardrail target:
+- they act inside real user sessions
+- they can reach internal enterprise applications
+- they can be redirected by prompt injection to harmful destinations
+
+Guardrails reduce blast radius even when the user intentionally starts the agent.
+
+## Misconception: "The agent can bypass it"
+
+Reality: that is exactly what the integration pattern prevents.
+
+The extension developer places Veto in the action loop before browser API calls. If the agent output is compromised, actions are still filtered by Veto first.

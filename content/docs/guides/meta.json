@@ -1,5 +1,6 @@
 {
   "pages": [
+    "browser-agents",
     "output-validation",
     "event-webhooks",
     "sequence-constraints",
