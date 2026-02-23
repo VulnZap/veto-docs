@@ -64,10 +64,11 @@ The SDK wraps any tool format. Deep integrations for the major frameworks:
 |-----------|-----------|--------|
 | OpenAI | `veto.wrap(tools)` | `veto.wrap(tools)` |
 | Anthropic | `veto.wrap(tools)` | `veto.wrap(tools)` |
-| [LangChain](/docs/integrations/langchain) | Middleware, ToolNode, callbacks | Middleware, ToolNode, callbacks |
-| [Vercel AI SDK](/docs/integrations/vercel-ai) | Middleware with streaming | — |
+| [LangChain](/docs/integrations/langchain) | `veto.wrap(tools)` | `veto.wrap(tools)` |
+| [Vercel AI SDK](/docs/integrations/vercel-ai) | `veto.wrap(tools)` | — |
 | [browser-use](/docs/integrations/browser-use) | Controller wrapper | Tools wrapper |
-| [MCP](/docs/integrations/mcp) | Auto-detected | — |
+| [MCP](/docs/integrations/mcp) | `veto.wrapMCPTools()` | — |
+| [CrewAI](/docs/integrations/crewai) | — | `veto.wrap(tools)` |
 | Google Gemini | `veto.wrap(tools)` | `veto.wrap(tools)` |
 
 ## Features
@@ -84,12 +85,12 @@ The SDK wraps any tool format. Deep integrations for the major frameworks:
 
 ## Next steps
 
-- [Quick Start](/docs/getting-started/quick-start) — end-to-end setup in 60 seconds
+- [Quick Start](/docs/getting-started/quick-start) — copy-paste tutorial, see Veto block a tool call in under 2 minutes
 - [SDK Reference](/docs/sdk/reference) — per-function TypeScript/Python toggle
 - [TypeScript SDK](/docs/sdk/typescript) — full TypeScript-specific reference
 - [Python SDK](/docs/sdk/python) — full Python-specific reference
 - [YAML Rule Format](/docs/rules/yaml-format) — complete rule syntax
-- [LangChain Integration](/docs/integrations/langchain) — middleware, ToolNode, callbacks
-- [Vercel AI SDK Integration](/docs/integrations/vercel-ai) — middleware with streaming
+- [LangChain Integration](/docs/integrations/langchain) — wrap LangChain tools with validation
+- [Vercel AI SDK Integration](/docs/integrations/vercel-ai) — wrap Vercel AI tools with validation
 - [Browser-Use Integration](/docs/integrations/browser-use) — browser automation guardrails
 - [How Validation Works](/docs/concepts/how-it-works) — architecture deep dive
