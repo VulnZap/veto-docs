@@ -35,7 +35,30 @@ pip install veto
 </Tab>
 </Tabs>
 
-### 2. Initialize configuration
+### 2. Wrap tools in one line
+
+Use `protect()` as the default entrypoint:
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { protect } from 'veto-sdk';
+
+const safeTools = await protect(tools);
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto import protect
+
+safe_tools = await protect(tools)
+```
+</Tab>
+</Tabs>
+
+For advanced control (custom config paths, explicit cloud/self-hosted settings, lifecycle ownership), use `Veto.init()` directly.
+
+### 3. Initialize configuration
 
 ```bash
 npx veto init
@@ -52,7 +75,7 @@ veto/
 
 The generated config defaults to **local mode** — all validation runs in-process using your YAML rules. No API key, no account, no network calls.
 
-### 3. Write your first rule
+### 4. Write your first rule
 
 Edit `veto/rules/default.yaml`. Here's a practical rule that blocks dangerous file operations and large transfers:
 
@@ -83,7 +106,7 @@ rules:
         value: 10000
 ```
 
-### 4. Add to your existing code
+### 5. Add to your existing code
 
 Pick your framework — every example below is complete and runnable.
 
@@ -91,12 +114,10 @@ Pick your framework — every example below is complete and runnable.
 <Tab value="OpenAI">
 ```typescript
 import OpenAI from 'openai';
-import { Veto } from 'veto-sdk';
+import { protect } from 'veto-sdk';
 
 const openai = new OpenAI();
-const veto = await Veto.init();
-
-const tools = veto.wrap([
+const tools = await protect([
   {
     type: 'function',
     function: {
@@ -123,12 +144,10 @@ const response = await openai.chat.completions.create({
 <Tab value="Anthropic">
 ```typescript
 import Anthropic from '@anthropic-ai/sdk';
-import { Veto } from 'veto-sdk';
+import { protect } from 'veto-sdk';
 
 const anthropic = new Anthropic();
-const veto = await Veto.init();
-
-const tools = veto.wrap([
+const tools = await protect([
   {
     name: 'transfer_funds',
     description: 'Transfer money to an account',
@@ -214,13 +233,11 @@ See [LangChain integration](/docs/integrations/langchain) for ToolNode and callb
 ```python
 import asyncio
 from openai import OpenAI
-from veto import Veto
+from veto import protect
 
 async def main():
     client = OpenAI()
-    veto = await Veto.init()
-
-    tools = veto.wrap([
+    tools = await protect([
         {
             "type": "function",
             "function": {
@@ -272,7 +289,7 @@ See [MCP integration](/docs/integrations/mcp) for full server setup.
 </Tab>
 </Tabs>
 
-### 5. What a denied call looks like
+### 6. What a denied call looks like
 
 When the agent tries to violate a rule, Veto throws a `ToolCallDeniedError`:
 
@@ -295,7 +312,7 @@ try {
 
 The agent receives the denial as a tool error and can adjust its behavior — feed the error back to the model so it retries with different arguments, throw to the caller, or degrade gracefully. See the [error handling guide](/docs/guides/error-handling) for framework-specific patterns.
 
-### 6. Go to production
+### 7. Go to production
 
 Everything above works locally — no account needed. When your agent goes to production, you'll want visibility into what it's doing: which tools it calls, which calls get denied, and the ability to require human approval for sensitive operations.
 
@@ -317,7 +334,7 @@ Get your API key at [runveto.com](https://runveto.com) (free tier available). Yo
 | Decision analytics and audit log | — | Yes |
 | [Policy packs](/docs/rules/policy-packs) (`@veto/coding-agent`, `@veto/financial`, etc.) | — | Yes |
 
-The local rules you wrote in step 3 stay exactly the same. Cloud mode doesn't replace them — it extends what's possible.
+The local rules you wrote in step 4 stay exactly the same. Cloud mode doesn't replace them — it extends what's possible.
 
 Need to self-host? The server is available at `ghcr.io/vulnzap/veto-server:latest` — see [SDK Modes](/docs/concepts/modes#self-hosted-mode).
 
@@ -340,15 +357,14 @@ it against rules before execution. The agent never knows the guardrail exists.
    - TypeScript: `npm install veto-sdk`
    - Python: `pip install veto`
 3. Initialize: `npx veto init` (creates `veto/` directory with config and rules)
-4. Find where tools are defined in this codebase and wrap them with `veto.wrap(tools)`
+4. Find where tools are defined in this codebase and wrap them with `protect(tools)`
 5. Create sensible default rules in `veto/rules/default.yaml` based on the tools in use
 
 ### Key integration pattern
 
 ```typescript
-import { Veto } from 'veto-sdk';
-const veto = await Veto.init();
-const wrappedTools = veto.wrap(existingTools); // drop-in replacement
+import { protect } from 'veto-sdk';
+const wrappedTools = await protect(existingTools); // drop-in replacement
 ```
 
 ### Reference docs
@@ -372,7 +388,7 @@ const veto = await Veto.init({ apiKey: process.env.VETO_API_KEY });
 1. Read the Veto docs at `docs.runveto.com/llms.txt`
 2. Install the SDK in your project
 3. Run `npx veto init` to scaffold the config directory
-4. Find your existing tool definitions and wrap them with `veto.wrap()`
+4. Find your existing tool definitions and wrap them with `protect()`
 5. Generate default rules based on the tools it finds
 6. Optionally enable cloud mode if you provide an API key
 

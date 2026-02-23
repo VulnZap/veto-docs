@@ -9,6 +9,33 @@ description: Full API reference for the Veto TypeScript SDK (v1.9.0).
 npm install veto-sdk
 ```
 
+## `protect(tools, options?)`
+
+Recommended entrypoint for new integrations.
+
+```typescript
+import { protect } from 'veto-sdk';
+
+const safeTools = await protect(tools);
+```
+
+Single-tool overload:
+
+```typescript
+const safeTool = await protect(tool);
+```
+
+Common options:
+
+```typescript
+const safeTools = await protect(tools, { pack: 'financial' });
+const safeToolsCloud = await protect(tools, { apiKey: 'veto_...' });
+const safeToolsLog = await protect(tools, { mode: 'log' });
+const safeToolsShadow = await protect(tools, { mode: 'shadow' }); // alias for log
+```
+
+Use `Veto.init()` directly when you need full lifecycle or initialization control.
+
 ## `Veto.init(options?)`
 
 Initialize Veto. Loads configuration from `./veto` by default.

@@ -1,3 +1,3 @@
 {
-  "pages": ["reference", "typescript", "python", "cli"]
+  "pages": ["typescript", "python", "reference", "cli"]
 }
