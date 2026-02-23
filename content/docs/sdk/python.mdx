@@ -18,6 +18,33 @@ pip install veto[gemini]      # Google Gemini support
 pip install veto[all]         # All providers
 ```
 
+## `protect(tools, **kwargs)`
+
+Recommended entrypoint for new integrations.
+
+```python
+from veto import protect
+
+safe_tools = await protect(tools)
+```
+
+Single-tool overload:
+
+```python
+safe_tool = await protect(tool)
+```
+
+Common options:
+
+```python
+safe_tools = await protect(tools, pack="financial")
+safe_tools_cloud = await protect(tools, api_key="veto_...")
+safe_tools_log = await protect(tools, mode="log")
+safe_tools_shadow = await protect(tools, mode="shadow")  # alias for log
+```
+
+Use `Veto.init()` directly when you need full lifecycle or initialization control.
+
 ## `Veto.init(options?)`
 
 Initialize Veto. Uses the `VETO_API_KEY` environment variable by default.

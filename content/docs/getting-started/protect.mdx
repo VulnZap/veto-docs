@@ -1,0 +1,73 @@
+---
+title: Zero-Config Setup
+description: Start protecting tools in one line with protect().
+---
+
+`protect()` is the fastest way to integrate Veto.
+
+Instead of a multi-step `Veto.init()` + `veto.wrap(...)` flow, use one call:
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { protect } from 'veto-sdk';
+
+const safeTools = await protect(tools);
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto import protect
+
+safe_tools = await protect(tools)
+```
+</Tab>
+</Tabs>
+
+## Progression
+
+### 1. Zero-config local mode
+
+Use local `./veto` rules automatically (or allow-all fallback when none is found):
+
+```typescript
+const safeTools = await protect(tools);
+```
+
+### 2. Explicit policy pack
+
+Apply a built-in pack quickly:
+
+```typescript
+const safeTools = await protect(tools, { pack: 'financial' });
+```
+
+### 3. Cloud mode
+
+Use an API key to enable dashboard, approvals, and cloud policies:
+
+```typescript
+const safeTools = await protect(tools, { apiKey: 'veto_...' });
+```
+
+### 4. Advanced control with `Veto.init()`
+
+Use `Veto.init()` directly when you need explicit lifecycle/config control:
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init({
+  configDir: './veto',
+  mode: 'strict',
+  apiKey: process.env.VETO_API_KEY,
+});
+
+const safeTools = veto.wrap(tools);
+```
+
+## Behavior notes
+
+- `protect()` accepts a single tool or a list; return type matches input.
+- `protect()` caches initialized Veto instances and reuses them for identical options.
+- `mode: 'shadow'` is currently treated as `mode: 'log'`.
