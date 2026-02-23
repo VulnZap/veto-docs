@@ -1,0 +1,167 @@
+---
+title: Framework Examples
+description: Use Veto with OpenAI, Anthropic, Vercel AI SDK, MCP tools, and Python.
+---
+
+Veto wraps any tool format. Here are copy-paste examples for the major frameworks. All examples assume you've already run `npx veto init` (or `veto init` for Python) and have rules in `veto/rules/`.
+
+## OpenAI
+
+```typescript
+import OpenAI from 'openai';
+import { Veto } from 'veto-sdk';
+
+const openai = new OpenAI();
+const veto = await Veto.init();
+
+const tools = veto.wrap([
+  {
+    type: 'function',
+    function: {
+      name: 'transfer_funds',
+      description: 'Transfer money to an account',
+      parameters: {
+        type: 'object',
+        properties: {
+          amount: { type: 'number' },
+          to: { type: 'string' },
+        },
+      },
+    },
+  },
+]);
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  tools,
+  messages: [{ role: 'user', content: 'Transfer $500 to Alice' }],
+});
+```
+
+## Anthropic
+
+```typescript
+import Anthropic from '@anthropic-ai/sdk';
+import { Veto } from 'veto-sdk';
+
+const anthropic = new Anthropic();
+const veto = await Veto.init();
+
+const tools = veto.wrap([
+  {
+    name: 'send_email',
+    description: 'Send an email',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string' },
+        subject: { type: 'string' },
+        body: { type: 'string' },
+      },
+    },
+  },
+]);
+
+const response = await anthropic.messages.create({
+  model: 'claude-sonnet-4-5-20250929',
+  max_tokens: 1024,
+  tools,
+  messages: [{ role: 'user', content: 'Email the team about the outage' }],
+});
+```
+
+## Vercel AI SDK
+
+```typescript
+import { generateText, tool } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { Veto } from 'veto-sdk';
+import { z } from 'zod';
+
+const veto = await Veto.init();
+
+const tools = veto.wrap({
+  transferFunds: tool({
+    description: 'Transfer money',
+    parameters: z.object({
+      amount: z.number(),
+      to: z.string(),
+    }),
+    execute: async ({ amount, to }) => {
+      return { success: true, amount, to };
+    },
+  }),
+});
+
+const result = await generateText({
+  model: openai('gpt-4o'),
+  tools,
+  prompt: 'Transfer $500 to Alice',
+});
+```
+
+## MCP Tools
+
+```typescript
+import { Veto } from 'veto-sdk';
+
+const veto = await Veto.init();
+
+// MCP tools use inputSchema instead of parameters — Veto auto-detects
+const tools = veto.wrap([
+  {
+    name: 'read_file',
+    description: 'Read a file',
+    inputSchema: {
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+    },
+  },
+]);
+```
+
+## Python (OpenAI)
+
+```python
+import asyncio
+from openai import OpenAI
+from veto import Veto
+
+async def main():
+    client = OpenAI()
+    veto = await Veto.init()
+
+    tools = veto.wrap([
+        {
+            "type": "function",
+            "function": {
+                "name": "transfer_funds",
+                "description": "Transfer money to an account",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "amount": {"type": "number"},
+                        "to": {"type": "string"},
+                    },
+                },
+            },
+        },
+    ])
+
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        tools=tools,
+        messages=[{"role": "user", "content": "Transfer $500 to Alice"}],
+    )
+
+asyncio.run(main())
+```
+
+## Next steps
+
+- [SDK Modes](/docs/concepts/modes) — local, cloud, and self-hosted explained
+- [How Validation Works](/docs/concepts/how-it-works) — architecture deep dive
+- [Constraints Reference](/docs/concepts/constraints) — every constraint type explained
+- [CLI Reference](/docs/sdk/cli) — compile, learn, test commands
+- [SDK Reference](/docs/sdk/reference) — per-function TypeScript/Python toggle
