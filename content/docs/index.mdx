@@ -44,7 +44,7 @@ agent = create_agent(tools=tools)  # agent is unaware of Veto
 
 Rules live in YAML files that the SDK loads automatically:
 
-```yaml title="veto/rules/default.yaml"
+```yaml title="veto/rules/defaults.yaml"
 rules:
   - id: limit-transfers
     action: block
@@ -65,7 +65,7 @@ See the [Quick Start](/docs/getting-started/quick-start) for complete, runnable 
 - **LLM validation** — natural language policies for cases static rules can't cover
 - **Budget constraints** — per-session cost circuit breaker for tool calls
 - **Session-aware** — track per-session call counts, argument history, and cross-tool constraints
-- **CLI tooling** — `veto compile` (NL → rules), `veto learn` (observe → generate), `veto test` (gap analysis)
+- **CLI tooling** — `veto compile` (NL → rules), `veto learn` (observe → generate), `veto test` (gap analysis), `veto scan` (coverage audit), `veto diff` (policy impact diff)
 - **TypeScript + Python** — identical APIs, identical behavior
 - **Real-time dashboard** — monitor every decision at [runveto.com](https://runveto.com)
 

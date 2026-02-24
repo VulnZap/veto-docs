@@ -8,8 +8,8 @@ You interact with Veto entirely through the SDK. Install it, wrap your tools, de
 - **Cloud** (recommended): `Veto.init({ apiKey: "veto_..." })` — dashboard, analytics, human-in-the-loop approvals, LLM validation
 - **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — server-side validation on your infrastructure, dashboard not included (`ghcr.io/vulnzap/veto-server:latest`)
 
-TypeScript SDK: `npm install veto-sdk` (v1.9.0)
-Python SDK: `pip install veto` (v0.9.0)
+TypeScript SDK: `npm install veto-sdk` (v1.12.0)
+Python SDK: `pip install veto` (v0.12.0)
 
 ## Getting Started
 
@@ -19,9 +19,9 @@ Python SDK: `pip install veto` (v0.9.0)
 
 ## SDKs
 
-- [TypeScript SDK](https://docs.runveto.com/docs/sdk/typescript): Full API reference (v1.9.0) — Veto.init, wrap, wrapTool, exportDecisions, VetoCloudClient, error types, provider adapters, all exports
-- [Python SDK](https://docs.runveto.com/docs/sdk/python): Full API reference (v0.9.0) — Veto.init, wrap, wrap_tool, export_decisions, VetoCloudClient, error types
-- [CLI](https://docs.runveto.com/docs/sdk/cli): Commands — init, compile (NL → YAML rules), learn (observe → generate), test (gap analysis), version
+- [TypeScript SDK](https://docs.runveto.com/docs/sdk/typescript): Full API reference (v1.12.0) — Veto.init, wrap, wrapTool, exportDecisions, VetoCloudClient, error types, provider adapters, all exports
+- [Python SDK](https://docs.runveto.com/docs/sdk/python): Full API reference (v0.12.0) — Veto.init, wrap, wrap_tool, export_decisions, VetoCloudClient, error types
+- [CLI](https://docs.runveto.com/docs/sdk/cli): Commands — init, compile, learn, test, scan (coverage audit), diff (policy change impact), version
 
 ## Integrations
 
@@ -48,7 +48,7 @@ Python SDK: `pip install veto` (v0.9.0)
 ## Concepts
 
 - [How Validation Works](https://docs.runveto.com/docs/concepts/how-it-works): Three validation paths (client-side deterministic, server-side deterministic, server-side LLM), policy cache, approval flow, session-aware validation, plan limits
-- [SDK Modes](https://docs.runveto.com/docs/concepts/modes): Local, cloud, and self-hosted mode detection, init options, operating modes (strict vs log)
+- [SDK Modes](https://docs.runveto.com/docs/concepts/modes): Local, cloud, and self-hosted mode detection, init options, operating modes (strict, log, shadow)
 - [Constraints Reference](https://docs.runveto.com/docs/concepts/constraints): Every constraint type — number ranges, string validation, array bounds, presence checks, YAML condition operators
 - [Budget Constraints](https://docs.runveto.com/docs/concepts/budget-constraints): Per-session cost circuit breaker with fixed and dynamic costs
 
@@ -56,6 +56,7 @@ Python SDK: `pip install veto` (v0.9.0)
 
 - [Agent Identity & Role Scoping](https://docs.runveto.com/docs/guides/agent-identity): Scope YAML rules by agentId with include/exclude lists; pass agentId, userId, role in ValidationContext defaults
 - [Error Handling](https://docs.runveto.com/docs/guides/error-handling): ToolCallDeniedError properties; three strategies (feed to model, throw, degrade); framework patterns for OpenAI, Anthropic, LangChain
+- [Shadow Mode](https://docs.runveto.com/docs/guides/shadow-mode): Roll out policies safely by observing deny and require_approval decisions without blocking execution
 - [Event Webhooks](https://docs.runveto.com/docs/guides/event-webhooks): Webhook notifications for deny, require_approval, budget_exceeded events; Slack, PagerDuty, generic, CEF formats
 - [Output Validation & Redaction](https://docs.runveto.com/docs/guides/output-validation): block/redact/log output_rules; regex redaction; standalone validateOutput API; built-in PII pattern constants
 - [Cross-Tool Sequence Constraints](https://docs.runveto.com/docs/guides/sequence-constraints): blocked_by (prevent exfiltration) and requires (enforce auth) — depend on prior session calls

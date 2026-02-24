@@ -8,8 +8,8 @@ You interact with Veto entirely through the SDK. Install it, wrap your tools, de
 - **Cloud** (recommended): `Veto.init({ apiKey: "veto_..." })` — dashboard, analytics, human-in-the-loop approvals, LLM validation
 - **Self-hosted**: `Veto.init({ endpoint: "https://..." })` — server-side validation on your infrastructure, dashboard not included (`ghcr.io/vulnzap/veto-server:latest`)
 
-TypeScript SDK: `npm install veto-sdk` (v1.9.0)
-Python SDK: `pip install veto` (v0.9.0)
+TypeScript SDK: `npm install veto-sdk` (v1.12.0)
+Python SDK: `pip install veto` (v0.12.0)
 
 ---
 
@@ -40,7 +40,7 @@ Veto auto-detects which mode to use based on how you initialize it:
 - **Local-first** — works out of the box with YAML rules, no API key or account needed
 - **Provider agnostic** — OpenAI, Anthropic, Google, LangChain, Vercel AI SDK, MCP, browser-use
 - **Budget constraints** — per-session cost circuit breaker for tool calls
-- **CLI tooling** — `veto compile` (NL → rules), `veto learn` (observe → generate), `veto test` (gap analysis)
+- **CLI tooling** — `veto compile` (NL → rules), `veto learn` (observe → generate), `veto test` (gap analysis), `veto scan` (coverage audit), `veto diff` (policy impact diff)
 - **Human-in-the-loop** — escalate sensitive tool calls for human approval before execution
 - **LLM validation** — natural language policies for cases static rules can't cover
 - **Session-aware** — track per-session call counts, argument history, and cross-tool constraints
@@ -95,7 +95,7 @@ This creates a `veto/` directory:
 veto/
 ├── veto.config.yaml    # Main configuration
 └── rules/
-    └── default.yaml    # Default rule file
+    └── defaults.yaml    # Default rule file
 ```
 
 The generated config defaults to **local mode** — rules are evaluated in-process with zero network calls.
@@ -116,7 +116,7 @@ npm install veto-sdk
 npx veto init
 ```
 
-Edit `veto/rules/default.yaml`:
+Edit `veto/rules/defaults.yaml`:
 
 ```yaml
 rules:
@@ -453,10 +453,13 @@ Same as cloud, on your infrastructure.
 |------|----------|
 | `strict` | Blocks denied calls — throws `ToolCallDeniedError` |
 | `log` | Logs denied calls but allows execution to continue |
+| `shadow` | Preserves deny/require_approval decisions for telemetry, but never blocks execution |
+
+Use shadow mode during rollout to observe real policy impact before switching to strict mode.
 
 ---
 
-## TypeScript SDK (v1.9.0)
+## TypeScript SDK (v1.12.0)
 
 ### `Veto.init(options?)`
 
@@ -473,7 +476,7 @@ const vetoSelfHosted = await Veto.init({ endpoint: "https://veto.internal.corp.c
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `configDir` | `string` | `"./veto"` | Path to config directory |
-| `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
+| `mode` | `"strict" \| "log" \| "shadow"` | `"strict"` | Operating mode |
 | `apiKey` | `string` | — | API key — triggers cloud mode |
 | `endpoint` | `string` | — | Server URL — triggers self-hosted mode |
 | `logLevel` | `string` | `"info"` | Log level |
@@ -569,7 +572,7 @@ veto.clearApprovalPreferences();
 
 ---
 
-## Python SDK (v0.9.0)
+## Python SDK (v0.12.0)
 
 ### `Veto.init(options?)`
 
@@ -593,7 +596,7 @@ veto = await Veto.init(VetoOptions(
 |--------|------|---------|-------------|
 | `api_key` | `str` | `VETO_API_KEY` env | API key |
 | `base_url` | `str` | `"https://api.runveto.com"` | API base URL |
-| `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
+| `mode` | `"strict" \| "log" \| "shadow"` | `"strict"` | Operating mode |
 | `log_level` | `str` | `"info"` | Log level |
 | `session_id` | `str` | — | Session ID |
 | `agent_id` | `str` | — | Agent ID |
@@ -655,7 +658,7 @@ veto.clear_approval_preferences()
 
 ### `veto init`
 
-Scaffolds `veto/` directory with config and default rules.
+Scaffolds `veto/` directory with config and `veto/rules/defaults.yaml`.
 
 ```bash
 npx veto init
@@ -698,6 +701,44 @@ Adversarial gap finder. Exit code 1 on critical gaps (CI-friendly).
 veto test
 veto test --policy ./veto/rules --format json
 ```
+
+### `veto scan`
+
+Audit discovered tools against loaded rule coverage.
+
+```bash
+veto scan
+veto scan --suggest
+veto scan --fail-uncovered
+veto scan --format json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--fail-uncovered` | Exit code `1` when uncovered tools are found |
+| `--suggest` | Include inline YAML suggestions for uncovered tools |
+| `--format <fmt>` | `text` (default) or `json` |
+
+Coverage rule: covered when a matching tool rule exists, or when any global rule exists.
+
+### `veto diff`
+
+Compare policy snapshots and optional deterministic replay impact from a JSONL call log.
+
+```bash
+veto diff financial.yaml
+veto diff --old ./rules-v1 --new ./rules-v2
+veto diff financial.yaml --log calls.jsonl
+veto diff --old ./rules-v1 --new ./rules-v2 --log calls.jsonl --format json
+```
+
+| Flag | Description |
+|------|-------------|
+| `<policy-path>` | Compare working copy vs `HEAD` for that file path |
+| `--old <path>` | Explicit old snapshot (file or directory) |
+| `--new <path>` | Explicit new snapshot (file or directory) |
+| `--log <path>` | Replay JSONL call log through old/new policies |
+| `--format <fmt>` | `text` (default) or `json` |
 
 ---
 
@@ -910,7 +951,7 @@ Five validation modes:
 |----------|--------|-------------|
 | `openai` | `gpt-4o`, `gpt-4o-mini` | `OPENAI_API_KEY` |
 | `anthropic` | `claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY` |
-| `gemini` | `gemini-3-flash-preview` | `GOOGLE_API_KEY` |
+| `gemini` | `gemini-3-flash-preview` | `GEMINI_API_KEY` |
 
 ---
 

@@ -70,16 +70,16 @@ This creates a `veto/` directory:
 veto/
 ├── veto.config.yaml
 └── rules/
-    └── default.yaml
+    └── defaults.yaml
 ```
 
 The generated config defaults to **local mode** — all validation runs in-process using your YAML rules. No API key, no account, no network calls.
 
 ### 4. Write your first rule
 
-Edit `veto/rules/default.yaml`. Here's a practical rule that blocks dangerous file operations and large transfers:
+Edit `veto/rules/defaults.yaml`. Here's a practical rule that blocks dangerous file operations and large transfers:
 
-```yaml title="veto/rules/default.yaml"
+```yaml title="veto/rules/defaults.yaml"
 rules:
   - id: block-sensitive-paths
     name: Block access to sensitive paths
@@ -358,7 +358,7 @@ it against rules before execution. The agent never knows the guardrail exists.
    - Python: `pip install veto`
 3. Initialize: `npx veto init` (creates `veto/` directory with config and rules)
 4. Find where tools are defined in this codebase and wrap them with `protect(tools)`
-5. Create sensible default rules in `veto/rules/default.yaml` based on the tools in use
+5. Create sensible default rules in `veto/rules/defaults.yaml` based on the tools in use
 
 ### Key integration pattern
 
@@ -396,9 +396,9 @@ const veto = await Veto.init({ apiKey: process.env.VETO_API_KEY });
 
 ## Common rules to start with
 
-Copy these into `veto/rules/default.yaml` as a starting point:
+Copy these into `veto/rules/defaults.yaml` as a starting point:
 
-```yaml title="veto/rules/default.yaml"
+```yaml title="veto/rules/defaults.yaml"
 rules:
   # Block large financial transfers
   - id: limit-transfers
