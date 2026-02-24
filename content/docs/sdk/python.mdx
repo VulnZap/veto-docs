@@ -40,7 +40,7 @@ Common options:
 safe_tools = await protect(tools, pack="financial")
 safe_tools_cloud = await protect(tools, api_key="veto_...")
 safe_tools_log = await protect(tools, mode="log")
-safe_tools_shadow = await protect(tools, mode="shadow")  # alias for log
+safe_tools_shadow = await protect(tools, mode="shadow")
 ```
 
 Use `Veto.init()` directly when you need full lifecycle or initialization control.
@@ -76,7 +76,7 @@ veto = await Veto.init(VetoOptions(
 |--------|------|---------|-------------|
 | `api_key` | `str` | `VETO_API_KEY` env | API key for Veto Cloud |
 | `base_url` | `str` | `"https://api.runveto.com"` | Cloud API base URL |
-| `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
+| `mode` | `"strict" \| "log" \| "shadow"` | `"strict"` | Operating mode |
 | `log_level` | `str` | `"info"` | Log level |
 | `session_id` | `str` | — | Session ID for tracking |
 | `agent_id` | `str` | — | Agent ID for tracking |
@@ -86,6 +86,8 @@ veto = await Veto.init(VetoOptions(
 | `on_approval_required` | `callable` | — | Hook fired when a tool call needs human approval |
 | `approval_poll_interval` | `float` | `2.0` | Seconds between approval polls |
 | `approval_timeout` | `float` | `300.0` | Max seconds to wait for approval |
+
+Operating mode precedence: explicit `mode` option > config `mode` > `VETO_MODE` env > `strict`.
 
 ## `veto.wrap(tools)`
 
@@ -133,6 +135,8 @@ class GuardResult:
     rule_id: str | None = None
     severity: Literal["critical", "high", "medium", "low", "info"] | None = None
     approval_id: str | None = None
+    shadow: bool | None = None
+    shadow_decision: str | None = None
 ```
 
 ### Guard behavior (important)
@@ -140,7 +144,8 @@ class GuardResult:
 - Uses the same internal validation engine path as wrapped tool calls.
 - Records every guard check in history (`get_history_stats()` and `export_decisions()` include guard calls).
 - Never raises `ToolCallDeniedError`; deny outcomes are returned in `GuardResult`.
-- In **log mode**, `guard()` still returns the real policy verdict (`deny` / `require_approval`) instead of converting to `allow`.
+- In **log mode** and **shadow mode**, `guard()` still returns the real policy verdict (`deny` / `require_approval`) instead of converting to `allow`.
+- In **shadow mode**, `guard()` includes `shadow=True` and `shadow_decision` for non-allow outcomes.
 - `session_id` / `agent_id` override instance-level tracking values for that call only.
 - `require_approval` is returned directly for cloud approval checks. `approval_id` is populated when available.
 - `rule_id` and `severity` are populated from validation metadata when present.
@@ -164,7 +169,7 @@ veto.clear_history()
 
 ## Error handling
 
-When a tool call is blocked, Veto raises a `ToolCallDeniedError`:
+When a tool call is blocked in `strict` mode, Veto raises a `ToolCallDeniedError`:
 
 ```python
 from veto.core.interceptor import ToolCallDeniedError

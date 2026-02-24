@@ -31,7 +31,7 @@ Common options:
 const safeTools = await protect(tools, { pack: 'financial' });
 const safeToolsCloud = await protect(tools, { apiKey: 'veto_...' });
 const safeToolsLog = await protect(tools, { mode: 'log' });
-const safeToolsShadow = await protect(tools, { mode: 'shadow' }); // alias for log
+const safeToolsShadow = await protect(tools, { mode: 'shadow' });
 ```
 
 Use `Veto.init()` directly when you need full lifecycle or initialization control.
@@ -58,7 +58,7 @@ const vetoSelfHosted = await Veto.init({ endpoint: "https://veto.internal.corp.c
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `configDir` | `string` | `"./veto"` | Path to config directory |
-| `mode` | `"strict" \| "log"` | `"strict"` | Operating mode |
+| `mode` | `"strict" \| "log" \| "shadow"` | `"strict"` | Operating mode |
 | `apiKey` | `string` | — | API key — triggers cloud mode |
 | `endpoint` | `string` | — | Server URL — triggers self-hosted mode |
 | `logLevel` | `string` | `"info"` | Log level |
@@ -69,6 +69,8 @@ const vetoSelfHosted = await Veto.init({ endpoint: "https://veto.internal.corp.c
 | `onApprovalRequired` | `(context, approvalId) => void` | — | Hook fired when a tool call needs human approval |
 
 Mode auto-detection: `endpoint` > `apiKey` > explicit config > `VETO_API_KEY` env > local fallback. See [SDK Modes](/docs/concepts/modes) for full precedence rules.
+
+Operating mode precedence: explicit `mode` option > config `mode` > `VETO_MODE` env > `strict`.
 
 ## `veto.wrap<T>(tools: T[]): T[]`
 
@@ -122,6 +124,8 @@ type GuardResult = {
   ruleId?: string;
   severity?: 'critical' | 'high' | 'medium' | 'low' | 'info';
   approvalId?: string;
+  shadow?: boolean;
+  shadowDecision?: string;
 };
 ```
 
@@ -130,7 +134,8 @@ type GuardResult = {
 - Uses the same internal `ValidationEngine.validate()` pipeline as wrapped tool calls.
 - Records every guard check in `HistoryTracker` (`getHistoryStats()` and `exportDecisions()` include guard calls).
 - Never throws `ToolCallDeniedError`; deny outcomes are returned in `GuardResult`.
-- In **log mode**, `guard()` still returns the real policy verdict (`deny` / `require_approval`) instead of converting to `allow`.
+- In **log mode** and **shadow mode**, `guard()` still returns the real policy verdict (`deny` / `require_approval`) instead of converting to `allow`.
+- In **shadow mode**, `guard()` includes `shadow: true` and `shadowDecision` for non-allow outcomes.
 - `context.sessionId` / `context.agentId` override instance-level tracking values for that call only.
 - `require_approval` is returned directly for local approval rules and cloud approval flow checks. `approvalId` is populated when available (for example, cloud responses with `approval_id`).
 - `ruleId` and `severity` are populated from validation metadata when present.
@@ -154,7 +159,7 @@ veto.clearHistory();
 
 ## Error handling
 
-When a tool call is blocked, Veto throws a `ToolCallDeniedError`:
+When a tool call is blocked in `strict` mode, Veto throws a `ToolCallDeniedError`:
 
 ```typescript
 import { ToolCallDeniedError } from 'veto-sdk';

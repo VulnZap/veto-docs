@@ -56,7 +56,15 @@ Use an API key to enable dashboard, approvals, and cloud policies:
 const safeTools = await protect(tools, { apiKey: 'veto_...' });
 ```
 
-### 4. Advanced control with `Veto.init()`
+### 4. Shadow mode rollout
+
+Run live traffic with full policy evaluation but no blocking:
+
+```typescript
+const safeTools = await protect(tools, { mode: 'shadow' });
+```
+
+### 5. Advanced control with `Veto.init()`
 
 Use `Veto.init()` directly when you need explicit lifecycle/config control:
 
@@ -77,4 +85,4 @@ const safeTools = veto.wrap(tools);
 - `protect()` accepts a single tool or a list; return type matches input.
 - `protect()` caches initialized Veto instances and reuses them for identical options.
 - In zero-config mode, multiple matching tool categories are merged into one active rule set.
-- `mode: 'shadow'` is currently treated as `mode: 'log'`.
+- `mode: 'shadow'` preserves real decisions for wrapped calls but never blocks execution.
