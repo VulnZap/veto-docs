@@ -26,9 +26,15 @@ safe_tools = await protect(tools)
 
 ## Progression
 
-### 1. Zero-config local mode
+### 1. Zero-config mode
 
-Use local `./veto` rules automatically (or allow-all fallback when none is found):
+If you don't specify a pack or config, Veto automatically applies sensible defaults based on your tool names.
+
+Precedence is:
+
+1. Local `./veto` rules (if present)
+2. Auto-applied built-in packs from tool-name heuristics
+3. Allow-all fallback when nothing matches
 
 ```typescript
 const safeTools = await protect(tools);
@@ -70,4 +76,5 @@ const safeTools = veto.wrap(tools);
 
 - `protect()` accepts a single tool or a list; return type matches input.
 - `protect()` caches initialized Veto instances and reuses them for identical options.
+- In zero-config mode, multiple matching tool categories are merged into one active rule set.
 - `mode: 'shadow'` is currently treated as `mode: 'log'`.
