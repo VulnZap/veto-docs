@@ -1,0 +1,89 @@
+---
+title: Shadow Mode
+description: Observe real authorization decisions in production without blocking execution.
+---
+
+`shadow` mode is a non-blocking rollout mode for production hardening.
+
+Veto still evaluates every tool call against all policies and computes the real decision, but wrapped execution is never blocked. This lets you measure impact safely before switching to `strict`.
+
+## Why use shadow mode
+
+- Validate policy quality against live traffic before enforcement.
+- See exactly what would have been denied or sent for approval.
+- Keep guardrails observable with no availability risk from false positives.
+
+## Strict vs log vs shadow
+
+| Mode | Wrapped execution | Validation decision returned for wrapped calls | `guard()` result |
+|------|-------------------|-----------------------------------------------|------------------|
+| `strict` | Blocks `deny` / `require_approval` | Real decision | Real decision |
+| `log` | Never blocks | Overridden to `allow` | Real decision |
+| `shadow` | Never blocks | **Real decision preserved** (`deny` / `require_approval`) | Real decision + shadow flags |
+
+## Enable shadow mode
+
+<Tabs items={["TypeScript", "Python"]}>
+<Tab value="TypeScript">
+```typescript
+import { Veto, protect } from 'veto-sdk';
+
+const veto = await Veto.init({ mode: 'shadow' });
+const safeTools = await protect(tools, { mode: 'shadow' });
+```
+
+Or via environment variable:
+
+```bash
+export VETO_MODE=shadow
+```
+</Tab>
+<Tab value="Python">
+```python
+from veto import Veto, VetoOptions, protect
+
+veto = await Veto.init(VetoOptions(mode="shadow"))
+safe_tools = await protect(tools, mode="shadow")
+```
+
+Or via environment variable:
+
+```bash
+export VETO_MODE=shadow
+```
+</Tab>
+</Tabs>
+
+Mode precedence is: explicit option > config file mode > `VETO_MODE` env var > `strict`.
+
+## Reading shadow output
+
+When a call would be denied or require approval, Veto writes a formatted stderr line (unless log level is `silent`):
+
+```text
+[shadow] 10:14:33 transfer_funds({"amount":50000,"to":"acct_123"}) - WOULD BE DENIED by transfer-limit
+[shadow] 10:14:35 deploy({"env":"prod"}) - WOULD REQUIRE APPROVAL by prod-approval
+```
+
+Interpretation:
+
+- `WOULD BE DENIED` means strict mode would block this call.
+- `WOULD REQUIRE APPROVAL` means strict mode would pause for approval workflow.
+- `by <rule-id>` identifies the matched rule when available.
+
+## Telemetry and dashboard filtering
+
+Shadow decisions are explicitly tagged for analytics and filtering:
+
+- Webhook events include `shadow: true`.
+- Decision-log context includes `shadow: true` and `shadow_decision`.
+- Guard results include `shadow` and `shadowDecision` / `shadow_decision` for non-allow outcomes.
+
+This allows dashboard views and downstream pipelines to separate observed shadow activity from enforced strict blocks.
+
+## Migration path
+
+1. Run `shadow` mode in production for about one week.
+2. Review shadow denials and approvals in logs/dashboard.
+3. Refine policies to reduce false positives.
+4. Switch to `strict` when deny/approval volume is acceptable.

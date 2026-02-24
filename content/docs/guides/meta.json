@@ -3,6 +3,7 @@
     "browser-agents",
     "output-validation",
     "event-webhooks",
+    "shadow-mode",
     "sequence-constraints",
     "agent-identity",
     "error-handling"

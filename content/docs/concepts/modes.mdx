@@ -108,7 +108,7 @@ If both `endpoint` and `apiKey` are provided, the SDK logs a warning and uses se
 ```typescript
 interface VetoOptions {
   configDir?: string;     // default: "./veto"
-  mode?: "strict" | "log";
+  mode?: "strict" | "log" | "shadow";
   apiKey?: string;        // triggers cloud mode
   endpoint?: string;      // triggers self-hosted mode
   logLevel?: string;
@@ -159,14 +159,15 @@ cloud:
 
 ## Operating modes
 
-Orthogonal to the runtime mode, Veto has two operating modes that control what happens when a tool call is denied:
+Orthogonal to the runtime mode, Veto has three operating modes that control what happens when a tool call is denied:
 
 | Mode | Behavior |
 |------|----------|
 | `strict` | Blocks denied calls — throws `ToolCallDeniedError` |
 | `log` | Logs denied calls but allows execution to continue |
+| `shadow` | Preserves real decisions for wrapped calls but never blocks execution |
 
-Use `log` mode during initial rollout to observe what would be blocked without affecting agent behavior.
+Use `shadow` during initial rollout to observe production impact, then switch to `strict` once policies are tuned.
 
 ## License
 

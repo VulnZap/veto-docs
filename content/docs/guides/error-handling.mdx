@@ -3,11 +3,13 @@ title: Error Handling
 description: Handle denied tool calls gracefully — retry strategies, agent messaging, and framework-specific patterns.
 ---
 
-When Veto blocks a tool call, it throws a `ToolCallDeniedError`. How your agent handles that error determines whether it retries, tells the user, or tries an alternative approach.
+In `strict` mode, Veto throws `ToolCallDeniedError` when a tool call is denied. In `log` and `shadow`, wrapped calls continue and denial data is returned in results/telemetry instead of exceptions.
+
+How your agent handles denied outcomes determines whether it retries, tells the user, or tries an alternative approach.
 
 ## ToolCallDeniedError
 
-Every denied tool call produces a `ToolCallDeniedError` with these properties:
+Every denied tool call in `strict` mode produces a `ToolCallDeniedError` with these properties:
 
 <Tabs items={["TypeScript", "Python"]}>
 <Tab value="TypeScript">
@@ -548,46 +550,56 @@ async def transfer_with_retry(tool, amount: float, to_account: str):
 </Tab>
 </Tabs>
 
-## Log mode: test policies without blocking
+## Shadow mode: test policies without blocking
 
-Use **log mode** to test your policies without disrupting agent behavior. Denied calls execute normally but are flagged in history:
+Use **shadow mode** to test your policies without disrupting agent behavior. Denied and approval-required calls execute normally, but the real decision is preserved in metadata and telemetry:
 
 <Tabs items={["TypeScript", "Python"]}>
 <Tab value="TypeScript">
 ```typescript
-// veto.config.yaml: mode: "log"
+// veto.config.yaml: mode: "shadow"
 const veto = await Veto.init();
 const wrapped = veto.wrap(tools);
 
-// This call would be denied in strict mode, but executes in log mode
+// This call would be denied in strict mode, but executes in shadow mode
 const result = await wrapped[0].handler({ amount: 5000, to_account: 'ACC-001' });
 // result: "Transferred $5000 to ACC-001" (not blocked)
 
-// Check what would have been blocked
+// Guard still returns the real decision plus shadow flags
+const guardResult = await veto.guard('transfer_funds', { amount: 5000, to_account: 'ACC-001' });
+console.log(guardResult.decision); // "deny"
+console.log(guardResult.shadow); // true
+
+// History still records the denial decision
 const stats = veto.getHistoryStats();
-console.log(stats.deniedCalls); // 0 (log mode converts deny → allow)
+console.log(stats.deniedCalls); // increments in shadow mode
 ```
 </Tab>
 <Tab value="Python">
 ```python
-# mode="log" in your Veto config
+# mode="shadow" in your Veto config
 veto = await Veto.init()
 wrapped = veto.wrap(tools)
 
-# This call would be denied in strict mode, but executes in log mode
+# This call would be denied in strict mode, but executes in shadow mode
 result = await wrapped[0].handler({"amount": 5000, "to_account": "ACC-001"})
 # result: "Transferred $5000 to ACC-001" (not blocked)
 
-# Export decisions to see what would have been blocked
+# Guard still returns the real decision plus shadow flags
+guard_result = await veto.guard("transfer_funds", {"amount": 5000, "to_account": "ACC-001"})
+print(guard_result.decision)  # "deny"
+print(guard_result.shadow)    # True
+
+# Export decisions to inspect shadow metadata
 decisions = veto.export_decisions("json")
-# Entries with "[LOG MODE] Would block:" in the reason were policy violations
+# Entries include shadow markers in metadata/context when applicable
 ```
 </Tab>
 </Tabs>
 
-For standalone checks via `veto.guard(...)`, log mode is intentionally different: it returns the real verdict (`deny` / `require_approval`) so callers can decide what to do.
+In contrast, `log` mode is a compatibility mode that overrides wrapped-call denies to `allow`.
 
-See [Modes](/docs/concepts/modes) for more on log vs strict mode.
+See [Modes](/docs/concepts/modes) for strict vs log vs shadow behavior.
 
 ## Other error types
 
@@ -605,5 +617,5 @@ All errors extend the standard `Error` (TypeScript) or `Exception` (Python) clas
 2. **Feed denials back to the model** rather than silently dropping them. The model can adapt (try smaller amounts, ask the user, use a different tool)
 3. **Use `is_error: true`** (Anthropic) or return a clear error string (OpenAI) so the model knows the call failed
 4. **Don't retry blindly** — if the same arguments are denied, they'll be denied again. Only retry with modified arguments
-5. **Use log mode first** — test your policies against real traffic before switching to strict mode
+5. **Use shadow mode first** — test your policies against real traffic before switching to strict mode
 6. **Log denials for audit** — use `veto.getHistoryStats()` or `veto.exportDecisions()` to review what was blocked

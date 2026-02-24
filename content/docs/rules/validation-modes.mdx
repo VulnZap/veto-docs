@@ -171,15 +171,16 @@ Requires [Ollama](https://ollama.ai) running locally. Best for air-gapped enviro
 
 ## Operating modes
 
-Orthogonal to validation mode, Veto has two operating modes that control what happens when a tool call is denied:
+Orthogonal to validation mode, Veto has three operating modes that control what happens when a tool call is denied:
 
 ```yaml
-mode: "strict"  # or "log"
+mode: "strict"  # or "log" or "shadow"
 ```
 
 | Mode | Behavior |
 |------|----------|
 | `strict` | Blocks denied calls — throws `ToolCallDeniedError` |
 | `log` | Logs denied calls but allows execution to continue |
+| `shadow` | Preserves real decisions for wrapped calls but never blocks execution |
 
-Use `log` mode during initial rollout to observe what would be blocked without affecting agent behavior. Switch to `strict` once you're confident in your policies.
+Use `shadow` during initial rollout to observe what would be blocked without affecting execution. Switch to `strict` once you're confident in your policies.
