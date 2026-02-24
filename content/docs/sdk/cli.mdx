@@ -88,7 +88,7 @@ veto compile --input "Cap transfers at $5000" --output ./veto/rules/limits.yaml 
 
 The compile command uses the LLM only at build time. The generated YAML rules run locally with zero network calls at runtime.
 
-Requires the corresponding provider API key as an environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`).
+Requires the corresponding provider API key as an environment variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`).
 
 ### `veto learn`
 
@@ -163,13 +163,74 @@ veto test --format json
 | `warning` | Potential bypass — weak regex, type coercion, missing bounds |
 | `info` | Suggestion — coverage improvements, best practices |
 
+### `veto scan`
+
+Audits discovered tools in your project against loaded rule coverage.
+
+```bash
+# Audit current project
+veto scan
+
+# Include inline YAML starter snippets for uncovered tools
+veto scan --suggest
+
+# Fail CI if uncovered tools exist
+veto scan --fail-uncovered
+
+# Machine-readable output
+veto scan --format json
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--fail-uncovered` | No | `false` | Exit with code `1` when uncovered tools are found |
+| `--suggest` | No | `false` | Include inline YAML rule suggestions for uncovered tools |
+| `--format <fmt>` | No | `text` | Output format: `text` or `json` |
+
+Coverage behavior:
+- A tool is covered if at least one matching tool rule exists, or at least one global rule is present.
+
+**Exit codes:**
+- `0` — Scan executed successfully
+- `1` — Only when `--fail-uncovered` is set and uncovered tools were found
+
+### `veto diff`
+
+Compares policy snapshots and can replay deterministic impact against historical tool-call logs.
+
+```bash
+# Compare working file vs HEAD snapshot (git-aware mode)
+veto diff financial.yaml
+
+# Compare explicit file or directory snapshots
+veto diff --old ./rules-v1 --new ./rules-v2
+
+# Add deterministic impact replay from JSONL tool-call log
+veto diff financial.yaml --log calls.jsonl
+
+# JSON output
+veto diff --old ./rules-v1 --new ./rules-v2 --log calls.jsonl --format json
+```
+
+Invocation modes:
+- Positional mode: `veto diff <policy-path>` compares working copy vs `HEAD` for that path.
+- Explicit mode: `--old` and `--new` must both be provided, and both must be files or both directories.
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `<policy-path>` | Positional mode only | — | Policy file path; compares working copy vs `HEAD` |
+| `--old <path>` | Explicit mode (with `--new`) | — | Old policy file or directory |
+| `--new <path>` | Explicit mode (with `--old`) | — | New policy file or directory |
+| `--log <path>` | No | — | JSONL tool-call log for deterministic replay impact |
+| `--format <fmt>` | No | `text` | Output format: `text` or `json` |
+
 ### `veto version`
 
 Prints the current SDK version.
 
 ```bash
 npx veto version
-# veto v0.1.0
+# veto v<installed-version>
 ```
 
 ### `veto help`

@@ -15,7 +15,7 @@ it against rules before execution. The agent never knows the guardrail exists.
    - Python: \`pip install veto\`
 3. Initialize: \`npx veto init\` (creates \`veto/\` directory with config and rules)
 4. Find where tools are defined in this codebase and wrap them with \`veto.wrap(tools)\`
-5. Create sensible default rules in \`veto/rules/default.yaml\` based on the tools in use
+5. Create sensible default rules in \`veto/rules/defaults.yaml\` based on the tools in use
 
 ### Key integration pattern
 
