@@ -3,7 +3,7 @@ title: Policy Packs
 description: Built-in policy packs you can extend and customize with YAML.
 ---
 
-Veto ships with four built-in policy packs. Add an `extends` field in your YAML file to inherit one, then override or append rules.
+Veto ships with six built-in policy packs. Add an `extends` field in your YAML file to inherit one, then override or append rules.
 
 ```yaml
 version: "1.0"
@@ -82,3 +82,39 @@ Included input rules:
 Included output rules:
 - `data-access-redact-email`
 - `data-access-redact-ssn`
+
+### `@veto/communication`
+
+Purpose: protect messaging/email flows with recipient limits, credential leakage blocking, and output redaction.
+
+Included rules:
+- `comm-block-mass-recipients`
+- `comm-block-sensitive-content`
+
+Included output rules:
+- `comm-redact-pii-in-output`
+
+### `@veto/deployment`
+
+Purpose: enforce human approval for production deploys and block risky force/skip-check deployments.
+
+Included rules:
+- `deploy-require-approval-production`
+- `deploy-block-force-push`
+
+## Auto-apply behavior in `protect()`
+
+When you call `protect()` without an explicit policy source (`configDir`, `pack`, inline `rules`, or `apiKey`) and no local `./veto` config exists, Veto auto-selects built-in packs based on tool names.
+
+Heuristic categories and pattern keywords:
+
+- `@veto/financial`: `transfer`, `payment`, `balance`, `withdraw`, `deposit`, `invoice`, `refund`, `charge`, `payout`, `wire`, `bank`, `fund`, `money`, `wallet`
+- `@veto/browser-automation`: `navigate`, `click`, `goto`, `browse`, `scroll`, `type_text`, `fill_form`, `screenshot`, `open_url`, `submit_form`, `page`, `tab`, `browser`
+- `@veto/data-access`: `query`, `sql`, `database`, `select`, `insert`, `table`, `fetch_record`, `read_record`, `db`, `collection`, `document`, `find`, `aggregate`
+- `@veto/coding-agent`: `exec`, `shell`, `command`, `terminal`, `bash`, `run_code`, `write_file`, `edit_file`, `read_file`, `delete_file`, `mkdir`, `code`, `script`
+- `@veto/communication`: `email`, `send_email`, `send_message`, `notify`, `sms`, `slack`, `message`, `mail`, `notification`, `chat`, `reply`
+- `@veto/deployment`: `deploy`, `publish`, `release`, `push`, `rollback`, `provision`, `terraform`, `kubernetes`, `k8s`, `docker`, `helm`, `ci_cd`
+
+If tool names match multiple categories, Veto loads all matching packs and merges their rules.
+
+If no patterns match, Veto falls back to allow-all behavior.
