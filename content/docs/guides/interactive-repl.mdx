@@ -1,6 +1,6 @@
 ---
 title: Interactive REPL
-description: Use Veto Studio (`npx veto`) for full-screen policy authoring, with legacy line REPL available via `--legacy`.
+description: Use Veto Studio (`npx veto-cli@latest`) for full-screen policy authoring, with legacy line REPL available via `--legacy`.
 ---
 
 Veto Studio is the default interactive experience.
@@ -17,32 +17,37 @@ Studio includes:
 ## Start Studio
 
 ```bash
-# Default behavior
-npx veto
+# Canonical package (default behavior)
+npx veto-cli@latest
 
 # Explicit Studio entrypoints
-npx veto --repl
-npx veto repl
+npx veto-cli@latest studio
+npx veto-cli@latest repl
+npx veto-cli@latest --repl
 
 # Legacy REPL compatibility path
-npx veto repl --legacy
+npx veto-cli@latest repl --legacy
+
+# Compatibility wrapper (still supported)
+npx veto-sdk@latest
 ```
 
 ## Studio flags
 
 ```bash
 # Force renderer
-npx veto repl --renderer ansi
-npx veto repl --renderer opentui
+npx veto-cli@latest studio --renderer ink
+npx veto-cli@latest studio --renderer ansi
+npx veto-cli@latest studio --renderer opentui
 
 # Pick workspace directly
-npx veto repl --directory ./packages/sdk
+npx veto-cli@latest studio --directory ./packages/sdk
 
 # Include examples/tests in discovery
-npx veto repl --include-examples --include-tests
+npx veto-cli@latest studio --include-examples --include-tests
 
 # Explicitly allow local template-only generation
-npx veto repl --demo-template
+npx veto-cli@latest studio --demo-template
 ```
 
 ## Generation reliability
@@ -51,13 +56,30 @@ Studio generation is quality-gated:
 - no silent template fallback by default
 - if no endpoint is configured, Studio opens setup guidance
 - template generation is opt-in only:
-  - `npx veto repl --demo-template`, or
+  - `npx veto-cli@latest studio --demo-template`, or
   - `studio.generation.allowTemplateFallback: true` in config
 
 Supported generation paths:
 1. Cloud: set `VETO_API_KEY`
 2. Kernel: set `validation.mode: kernel` and `kernel.*`
 3. Self-hosted: set `llm.baseUrl` and model settings
+
+## Cloud login and device approval
+
+```bash
+npx veto-cli@latest cloud login
+npx veto-cli@latest cloud whoami
+```
+
+Device login opens a verification URL in dashboard. Approve the session there, then return to terminal to continue.
+
+## Headless companion commands
+
+```bash
+npx veto-cli@latest policy generate --tool approve_invoice --prompt "do not approve invoices above 50 dollars" --save ./veto/rules/approve-invoice.yaml --json
+npx veto-cli@latest policy apply --file ./veto/rules/approve-invoice.yaml --target cloud --json
+echo '{"amount":120}' | npx veto-cli@latest guard check --tool approve_invoice --mode local --json
+```
 
 ## Semantics update: negated approval phrasing
 
