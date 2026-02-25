@@ -1,5 +1,6 @@
 {
   "pages": [
+    "multi-tenant",
     "browser-agents",
     "output-validation",
     "event-webhooks",
