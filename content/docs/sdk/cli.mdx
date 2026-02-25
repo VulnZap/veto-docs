@@ -5,42 +5,59 @@ description: Veto command-line interface reference.
 
 ## Installation
 
-The CLI is included with both SDKs:
+Canonical package (Node.js):
 
 ```bash
-# TypeScript (via npx)
-npx veto <command>
+npx veto-cli@latest <command>
+pnpm dlx veto-cli@latest <command>
+bunx veto-cli@latest <command>
+```
 
-# Python (installed globally with pip)
+Compatibility wrapper (kept for existing users):
+
+```bash
+npx veto-sdk@latest <command>
+```
+
+Python:
+
+```bash
+# Installed globally with pip
 veto <command>
 ```
 
 ## Commands
 
-### `veto repl` / `veto --repl` / `veto`
+### `veto` / `veto studio` / `veto repl` / `veto --repl`
 
 Starts **Veto Studio** (full-screen, keyboard-first TUI) by default.
 
 ```bash
-# Explicit subcommand
-veto repl
-
-# Explicit flag
-veto --repl
-
 # No command defaults to Studio
 veto
 
-# Legacy line REPL fallback
+# Explicit Studio command
+veto studio
+
+# Compatibility entrypoints
+veto repl
+veto --repl
+
+# Legacy line REPL
 veto repl --legacy
 ```
 
 Studio-focused flags:
-- `--renderer auto|opentui|ansi`
+- `--renderer auto|ink|opentui|ansi`
 - `--directory <path>`
 - `--include-examples`
 - `--include-tests`
 - `--demo-template`
+
+Renderer notes:
+- `ink` is the default interactive renderer on Node.js.
+- `opentui` is optional and intended for Bun runtimes.
+- `ansi` is fallback-safe for CI and limited terminals.
 
 Legacy REPL (`--legacy`) keeps slash commands:
 - `/scan` for coverage suggestions
@@ -50,6 +67,98 @@ Legacy REPL (`--legacy`) keeps slash commands:
 - `/export` and `/load` for YAML workflows
 
 For full workflows and a copy-paste demo script, see [Interactive REPL](/docs/guides/interactive-repl).
+
+### `veto policy generate`
+
+Generate policy YAML from natural language (local or cloud target).
+
+```bash
+# Local generation, save file
+veto policy generate \
+  --tool approve_invoice \
+  --prompt "do not approve invoices above 50 dollars" \
+  --save ./veto/rules/approve-invoice.yaml
+
+# Cloud generation with machine-readable output
+veto policy generate \
+  --tool approve_invoice \
+  --prompt "do not approve invoices above 50 dollars" \
+  --target cloud \
+  --json
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--tool <name>` | Yes | — | Tool name to generate policy for |
+| `--prompt <text>` | Yes | — | Natural-language policy intent |
+| `--mode-hint <hint>` | No | `auto` | `auto`, `deterministic`, or `llm` |
+| `--target <target>` | No | `local` | `local` or `cloud` |
+| `--save <path>` | No | Auto path (local target) | Save generated YAML |
+| `--demo-template` | No | `false` | Allow explicit template fallback generation |
+| `--json` | No | `false` | Deterministic JSON response envelope |
+
+### `veto policy apply`
+
+Apply an existing policy YAML file locally or submit it to cloud drafts.
+
+```bash
+veto policy apply --file ./veto/rules/approve-invoice.yaml
+veto policy apply --file ./veto/rules/approve-invoice.yaml --target cloud --json
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--file <path>` | Yes | — | Policy YAML file path |
+| `--target <target>` | No | `local` | `local` or `cloud` |
+| `--project <id>` | No | Current cloud context | Cloud project scope override |
+| `--json` | No | `false` | Deterministic JSON response envelope |
+
+### `veto guard check`
+
+Run a non-interactive guard evaluation for a tool call.
+
+```bash
+# Explicit args JSON
+veto guard check --tool approve_invoice --args '{"amount":120}' --mode local --json
+
+# Pipe args from stdin
+echo '{"amount":120}' | veto guard check --tool approve_invoice --mode local --json
+```
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--tool <name>` | Yes | — | Tool name |
+| `--args <json>` | No | `{}` or stdin | Tool arguments JSON object |
+| `--context <json>` | No | `{}` | Extra context JSON object |
+| `--mode <mode>` | No | `local` | `local`, `cloud`, `kernel`, or `custom` |
+| `--json` | No | `false` | Deterministic JSON response envelope |
+
+### `veto cloud login` and context commands
+
+Device flow for human users and context management for CLI sessions.
+
+```bash
+veto cloud login
+veto cloud whoami
+veto cloud org use <org-id>
+veto cloud project use <project-id>
+veto cloud logout
+```
+
+Login flow:
+1. Run `veto cloud login` in terminal.
+2. Open the verification URL shown by CLI.
+3. Approve the device code in dashboard.
+4. Return to terminal; CLI stores scoped session tokens.
+
+### `veto doctor`
+
+Diagnostics for runtime, renderer, auth, and connectivity:
+
+```bash
+veto doctor
+veto doctor --json
+```
 
 ### `veto init`
 
