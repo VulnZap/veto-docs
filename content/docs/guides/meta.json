@@ -3,6 +3,7 @@
     "multi-tenant",
     "browser-agents",
     "output-validation",
+    "interactive-repl",
     "event-webhooks",
     "shadow-mode",
     "sequence-constraints",
