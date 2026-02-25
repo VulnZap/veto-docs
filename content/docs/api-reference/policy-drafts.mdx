@@ -1,0 +1,122 @@
+---
+title: Policy Drafts API
+description: Create, review, and approve policy drafts before they become active policies.
+---
+
+Policy drafts let AI agents propose policies that humans can review before activation.
+
+All endpoints require authentication via API key (`X-Veto-API-Key`) or Bearer JWT with `X-Organization-Id` header.
+
+## Draft status lifecycle
+
+`draft` -> `pending_review` -> `approved` or `rejected`
+
+## POST /v1/policy-drafts
+
+Create a policy draft.
+
+### Body
+
+```json
+{
+  "name": "Guard file operations",
+  "description": "Block sensitive path access",
+  "projectId": "PROJECT_UUID",
+  "createdByAgentId": "agent_123",
+  "rules": [
+    {
+      "id": "block-sensitive-paths",
+      "action": "block",
+      "tools": ["read_file", "write_file"],
+      "conditions": [
+        {
+          "field": "arguments.path",
+          "operator": "matches",
+          "value": "(\\.env|/etc/passwd|credentials|secrets)"
+        }
+      ],
+      "severity": "high"
+    }
+  ]
+}
+```
+
+### Response (201)
+
+```json
+{
+  "data": {
+    "id": "d4a2f7be-8b0c-4b5d-a8ea-1f56f6a2b8f3",
+    "organizationId": "ORG_UUID",
+    "projectId": "PROJECT_UUID",
+    "name": "Guard file operations",
+    "status": "draft",
+    "createdByAgentId": "agent_123",
+    "rules": [],
+    "createdAt": "2026-02-25T18:00:00Z",
+    "updatedAt": "2026-02-25T18:00:00Z"
+  }
+}
+```
+
+## GET /v1/policy-drafts
+
+List drafts for the current org.
+
+### Query params
+
+| Param | Type | Required | Description |
+|---|---|---|---|
+| `projectId` | `string (UUID)` | No | Filter by project |
+| `status` | `"draft" \| "pending_review" \| "approved" \| "rejected"` | No | Filter by status |
+
+### Example
+
+```bash
+curl "https://api.vetohq.com/v1/policy-drafts?status=pending_review&projectId=PROJECT_UUID" \
+  -H "Authorization: Bearer $VETO_API_KEY"
+```
+
+## GET /v1/policy-drafts/:id
+
+Get one draft by ID.
+
+## PATCH /v1/policy-drafts/:id
+
+Update `name`, `description`, `rules`, or `status`.
+
+## DELETE /v1/policy-drafts/:id
+
+Delete a draft.
+
+Returns `204 No Content` on success.
+
+## POST /v1/policy-drafts/:id/submit
+
+Move a draft from `draft` to `pending_review`.
+
+If the draft is not in `draft` status, returns a validation error.
+
+## POST /v1/policy-drafts/:id/approve
+
+Approve a `pending_review` draft and apply policies.
+
+Approval behavior:
+- Requires authenticated user context (not API-key-only auth).
+- Only rules with `action: "allow"` or `action: "block"` are approvable.
+- Disabled rules (`enabled: false`) are skipped.
+- Rules must target at least one tool and include at least one condition.
+- Multiple rules for the same tool are merged into a single active policy constraint set.
+
+## POST /v1/policy-drafts/:id/reject
+
+Reject a `pending_review` draft.
+
+Sets:
+- `status: "rejected"`
+- `reviewedBy`
+- `reviewedAt`
+
+## Frontend integration
+
+The dashboard consumes this API at `/dashboard/drafts` and defaults to listing `pending_review` drafts.

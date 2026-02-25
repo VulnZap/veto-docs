@@ -1,0 +1,64 @@
+---
+title: Policy Draft Review Workflow
+description: Use the dashboard review queue to approve or reject AI-generated policy drafts.
+---
+
+This guide covers the human review flow for policy drafts in the dashboard.
+
+## When to use drafts
+
+Use policy drafts when an agent proposes policy changes that should not go live automatically.
+
+Typical use cases:
+- Security-sensitive tools (`exec`, file deletion, outbound requests)
+- Multi-team workflows where security or platform owners approve changes
+- AI-assisted policy generation that needs human verification
+
+## Dashboard review queue
+
+Open:
+
+```text
+/dashboard/drafts
+```
+
+The page shows drafts in `pending_review` state and allows:
+- inspect generated rules and conditions
+- approve draft
+- reject draft
+
+On approval, Veto creates or updates active policies for each targeted tool.
+
+## Recommended workflow
+
+1. Agent creates draft via `POST /v1/policy-drafts`.
+2. Agent or system submits draft via `POST /v1/policy-drafts/:id/submit`.
+3. Reviewer opens `/dashboard/drafts`.
+4. Reviewer approves or rejects.
+5. If approved, monitor policy decisions in `/v1/decisions` and dashboard events.
+
+## Project-scoped review
+
+Drafts can be scoped to a project using `projectId`.
+
+This lets you:
+- test stricter policies in one project first
+- run customer-specific guardrails without affecting org-wide defaults
+
+The dashboard and API both support project filtering for draft listings.
+
+## Safety checks during approval
+
+During approval, the server enforces:
+- rules must include at least one tool
+- rules must include at least one condition
+- only `allow` / `block` actions are converted to active deterministic constraints
+- duplicate constraints are deduplicated when merging multiple rules per tool
+
+If a draft fails validation, approval is rejected and the draft stays pending.
+
+## Related docs
+
+- [Policy Drafts API](/docs/api-reference/policy-drafts)
+- [Policies API](/docs/api-reference/policies)
+- [Multi-Tenant Policy Scoping](/docs/guides/multi-tenant)
