@@ -1,5 +1,6 @@
 {
   "pages": [
+    "policy-drafts-review",
     "multi-tenant",
     "browser-agents",
     "output-validation",
