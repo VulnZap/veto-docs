@@ -1,0 +1,99 @@
+---
+title: Multi-Tenant Policy Scoping
+description: Isolate policies per project (customer) while using org-wide policies as defaults.
+---
+
+Multi-tenant policy scoping lets you define per-project policies that override org-wide defaults. This is essential for SaaS companies that need different rules for different customers.
+
+## Concepts
+
+| Term | Meaning |
+|------|---------|
+| **Organization** | Your company's Veto account |
+| **Project** | One of your customers / environments |
+| **Org-wide policy** | A policy with no `projectId` — applies as the default for all projects |
+| **Project policy** | A policy scoped to a specific `projectId` — overrides the org-wide default for that project |
+
+## How resolution works
+
+When a validate request arrives, Veto resolves the policy in this order:
+
+1. Look for an **active project-specific policy** matching the org, tool, and project.
+2. If none exists, fall back to the **active org-wide policy** for that org and tool.
+3. If neither exists, return a `policy_not_found` error.
+
+Project policies fully replace the org-wide policy for that tool — there is no merging.
+
+## API examples
+
+### Create an org-wide default policy
+
+```bash
+curl -X POST https://api.vetohq.com/v1/policies \
+  -H "Authorization: Bearer $VETO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toolName": "send_email",
+    "mode": "deterministic",
+    "constraints": [
+      { "argumentName": "to", "enabled": true, "regex": "^[^@]+@example\\.com$" }
+    ]
+  }'
+```
+
+This policy applies to **all** projects that don't have their own `send_email` policy.
+
+### Create a project-specific override
+
+```bash
+curl -X POST https://api.vetohq.com/v1/policies \
+  -H "Authorization: Bearer $VETO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toolName": "send_email",
+    "projectId": "PROJECT_UUID",
+    "mode": "deterministic",
+    "constraints": [
+      { "argumentName": "to", "enabled": true, "regex": "^[^@]+@(example|partner)\\.com$" }
+    ]
+  }'
+```
+
+Now `send_email` calls from `PROJECT_UUID` use the wider regex, while all other projects still use the org-wide default.
+
+### List project-specific policies
+
+```bash
+curl "https://api.vetohq.com/v1/policies?projectId=PROJECT_UUID" \
+  -H "Authorization: Bearer $VETO_API_KEY"
+```
+
+Omit `projectId` to list all policies (org-wide and project-scoped).
+
+### Update / delete with project scope
+
+Pass `?projectId=PROJECT_UUID` as a query parameter on PUT, DELETE, activate, and deactivate endpoints to target a project-scoped policy:
+
+```bash
+# Activate a project-scoped policy
+curl -X POST "https://api.vetohq.com/v1/policies/send_email/activate?projectId=PROJECT_UUID" \
+  -H "Authorization: Bearer $VETO_API_KEY"
+
+# Delete a project-scoped policy (reverts to org-wide default)
+curl -X DELETE "https://api.vetohq.com/v1/policies/send_email?projectId=PROJECT_UUID" \
+  -H "Authorization: Bearer $VETO_API_KEY"
+```
+
+## API key to project mapping
+
+Each API key is associated with a project. When a validate request arrives, Veto automatically resolves the `projectId` from the API key's auth context — no extra parameters needed in the validate call.
+
+## Cache invalidation
+
+When you modify an **org-wide** policy, Veto automatically invalidates cached policy lookups for all projects that might be falling back to it. Project-specific cache entries are scoped and invalidated independently.
+
+## Migration notes
+
+- Existing policies receive `project_id = NULL`, making them org-wide defaults.
+- No breaking changes to existing API calls — `projectId` is optional everywhere.
+- The unique constraint on `(organization_id, tool_name)` is replaced by two partial indexes: one for project-scoped and one for org-wide, so the same tool can have both.
