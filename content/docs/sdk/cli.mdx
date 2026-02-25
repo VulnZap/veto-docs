@@ -19,7 +19,7 @@ veto <command>
 
 ### `veto repl` / `veto --repl` / `veto`
 
-Starts the interactive policy REPL.
+Starts **Veto Studio** (full-screen, keyboard-first TUI) by default.
 
 ```bash
 # Explicit subcommand
@@ -28,11 +28,21 @@ veto repl
 # Explicit flag
 veto --repl
 
-# No command defaults to REPL
+# No command defaults to Studio
 veto
+
+# Legacy line REPL fallback
+veto repl --legacy
 ```
 
-Use it to iterate on policies in one shell:
+Studio-focused flags:
+- `--renderer auto|opentui|ansi`
+- `--directory <path>`
+- `--include-examples`
+- `--include-tests`
+- `--demo-template`
+
+Legacy REPL (`--legacy`) keeps slash commands:
 - `/scan` for coverage suggestions
 - `/test <tool>({args})` for local policy evaluation
 - `/test-suite` for generated scenario testing
