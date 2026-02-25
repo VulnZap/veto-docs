@@ -17,6 +17,30 @@ veto <command>
 
 ## Commands
 
+### `veto repl` / `veto --repl` / `veto`
+
+Starts the interactive policy REPL.
+
+```bash
+# Explicit subcommand
+veto repl
+
+# Explicit flag
+veto --repl
+
+# No command defaults to REPL
+veto
+```
+
+Use it to iterate on policies in one shell:
+- `/scan` for coverage suggestions
+- `/test <tool>({args})` for local policy evaluation
+- `/test-suite` for generated scenario testing
+- `/explain <ruleId>` for rule explanations
+- `/export` and `/load` for YAML workflows
+
+For full workflows and a copy-paste demo script, see [Interactive REPL](/docs/guides/interactive-repl).
+
 ### `veto init`
 
 Scaffolds a new Veto configuration in the current directory.

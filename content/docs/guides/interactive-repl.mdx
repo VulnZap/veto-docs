@@ -1,0 +1,113 @@
+---
+title: Interactive REPL
+description: Use `npx veto` as an interactive policy shell to scan tools, test rules, generate policy YAML, and explain decisions.
+---
+
+The REPL is the fastest way to iterate on guardrails locally.
+
+It gives you one shell where you can:
+- discover tool coverage (`/scan`)
+- test specific tool calls (`/test`)
+- run scenario suites (`/test-suite`)
+- generate and save policy YAML from plain English
+- explain rule behavior (`/explain`)
+
+## Start the REPL
+
+```bash
+# Default behavior when no command is passed
+npx veto
+
+# Explicit flag
+npx veto --repl
+
+# Explicit subcommand
+npx veto repl
+```
+
+## Core slash commands
+
+| Command | What it does |
+|---|---|
+| `/scan` | Rescans project tools and prints coverage suggestions |
+| `/test <tool>({args})` | Evaluates one tool call against local rules |
+| `/test-suite` | Runs generated scenarios against loaded rules |
+| `/explain <ruleId>` | Explains a specific rule |
+| `/list` | Lists active rules in the current session |
+| `/export [file]` | Exports merged rules to YAML (`./veto/rules/repl.generated.yaml` by default) |
+| `/load <file>` | Loads a YAML policy file into the current session |
+| `/clear` | Clears session-added rules and reloads from disk |
+| `/help` | Shows command help |
+| `/quit` | Exits the REPL |
+
+Aliases: `/q`, `/?`, `/s`, `/t`, `/ts`, `/e`, `/ls`, `/x`, `/c`
+
+## Natural-language flows
+
+You can type plain English directly (without `/` commands).
+
+The REPL auto-routes common intents:
+- **simulate**: "what would happen if my agent transfers $50,000?"
+- **generate**: "block emails to external domains"
+- **explain**: "explain the transfer-limit rule"
+- **test suite**: "test my agent against current rules"
+
+## Quick demo script
+
+Use this for a clean local walkthrough:
+
+```text
+veto> /scan
+veto> block transfer_funds over $25000
+veto> /test transfer_funds({"amount": 50000, "to_account": "acct_123"})
+veto> /test transfer_funds({"amount": 500, "to_account": "acct_123"})
+veto> what would happen if my agent tried to transfer $75,000?
+veto> /list
+veto> /explain <rule-id>
+veto> /export
+veto> /quit
+```
+
+## Generation modes and fallback behavior
+
+REPL generation/explanation can run in four modes:
+
+1. **Cloud**: set `VETO_API_KEY`
+2. **Self-hosted**: set `llm.baseUrl` in `veto/veto.config.yaml`
+3. **Kernel**: enable `validation.mode: kernel` (or set `kernel` config)
+4. **Template fallback**: local deterministic generation when no endpoint is configured
+
+Template mode is local-first and works offline.
+
+Kernel example:
+
+```yaml title="veto/veto.config.yaml"
+validation:
+  mode: kernel
+
+kernel:
+  baseUrl: http://localhost:11434/v1
+  model: hf.co/ycaleb/veto-warden-4b-GGUF:Q4_K_M
+```
+
+## Save, load, and session behavior
+
+- Generated policy YAML is shown inline before save.
+- You can save immediately, choose a custom path, or edit YAML before writing.
+- `/load` merges external YAML into the live session.
+- `/clear` drops session additions and reloads baseline local rules.
+- `/export` writes the merged session state to a YAML file.
+
+## Local testing guarantees
+
+`/test` runs locally and reports deterministic policy outcomes without requiring network connectivity.
+
+## History persistence
+
+REPL history is persisted to:
+
+```text
+~/.veto_history
+```
+
+History is deduplicated and capped so recent high-signal commands stay available across sessions.
