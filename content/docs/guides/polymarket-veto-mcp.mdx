@@ -1,0 +1,135 @@
+---
+title: Polymarket With Veto MCP
+description: Run Polymarket trading tools behind Veto policies for agent-safe execution.
+---
+
+This guide shows how to run a guarded MCP sidecar for Polymarket so AI agents can query markets safely and route risky mutations through Veto policy checks.
+
+Tagline: **Polymarket CLI, but safe for agents.**
+
+## Architecture
+
+```text
+Agent (Claude/Cursor/MCP client)
+  -> polymarket-veto-mcp sidecar
+    -> Veto policy validation (local or cloud)
+      -> polymarket CLI command execution
+```
+
+Decision mapping:
+
+- `allow`: command executes (or simulates for mutating tools in safe mode)
+- `deny`: JSON-RPC error `-32001`
+- `require_approval`: JSON-RPC error `-32002`
+
+## 1) Install Polymarket CLI
+
+Follow upstream install instructions first:
+
+- [Polymarket CLI](https://github.com/Polymarket/polymarket-cli)
+
+Quick check:
+
+```bash
+polymarket --version
+```
+
+## 2) Start guarded MCP sidecar
+
+```bash
+npx @vulnzap/polymarket-veto-mcp serve
+```
+
+Default runtime posture:
+
+- transport: `stdio`
+- policy profile: `defaults`
+- mutating tools: simulation-first
+- live trading: disabled unless explicitly enabled
+
+## 3) Inspect tools and health
+
+```bash
+npx @vulnzap/polymarket-veto-mcp print-tools
+npx @vulnzap/polymarket-veto-mcp doctor
+```
+
+## 4) Policy profiles
+
+The sidecar supports three launch profiles:
+
+- `defaults`: launch-safe baseline
+- `conservative`: stricter approvals / more blocks
+- `agent`: autonomous-but-contained profile
+
+Select profile at startup:
+
+```bash
+npx @vulnzap/polymarket-veto-mcp serve --policy-profile defaults
+```
+
+## 5) Simulation vs live execution
+
+Mutating tools are simulated by default.
+
+To allow live execution you must satisfy all three:
+
+1. start with `--simulation off` (or config equivalent)
+2. set `execution.allowLiveTrades: true`
+3. export `ALLOW_LIVE_TRADES=true`
+
+This prevents accidental wallet-impacting actions from autonomous agents.
+
+## 6) Local-first and optional cloud mode
+
+The default Veto config is local deterministic mode.
+
+If you want cloud-backed validation, set in `veto/veto.config.yaml`:
+
+```yaml
+validation:
+  mode: cloud
+cloud:
+  baseUrl: https://api.runveto.com
+```
+
+Then set your API key:
+
+```bash
+export VETO_API_KEY=veto_xxx
+```
+
+## Tool coverage in v1
+
+Read-only:
+
+- `markets_list`
+- `markets_search`
+- `markets_get`
+- `clob_book`
+- `clob_midpoint`
+- `clob_price`
+- `portfolio_positions`
+
+Mutating (policy-guarded):
+
+- `order_create_limit`
+- `order_market`
+- `order_cancel`
+- `order_cancel_all`
+- `approve_set`
+- `ctf_split`
+- `ctf_merge`
+- `ctf_redeem`
+
+Not exposed:
+
+- `wallet_import`
+- `wallet_reset`
+- `clob_delete_api_key`
+
+## Related
+
+- [MCP Gateway](/docs/guides/mcp-gateway)
+- [MCP Integration](/docs/integrations/mcp)
+- [CLI Reference](/docs/sdk/cli)
