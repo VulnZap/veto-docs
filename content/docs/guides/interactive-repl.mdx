@@ -50,6 +50,10 @@ npx veto-cli@latest studio --include-examples --include-tests
 npx veto-cli@latest studio --demo-template
 ```
 
+Renderer behavior:
+- `ink` is the default on Node.js terminals.
+- if renderer startup fails, Studio falls back automatically (`ink` -> `ansi`, or `opentui` -> `ink`/`ansi`) with a warning line.
+
 ## Generation reliability
 
 Studio generation is quality-gated:
@@ -111,4 +115,20 @@ History remains persisted at:
 
 ```text
 ~/.veto_history
+```
+
+## Troubleshooting
+
+If `npx veto-cli@latest` throws module import errors under `~/.npm/_npx`, the temporary `npx` install is corrupted.
+
+Run with an isolated npm cache:
+
+```bash
+npm_config_cache=/tmp/veto-npx-cache npx -y veto-cli@latest
+```
+
+Then retry normal invocation:
+
+```bash
+npx -y veto-cli@latest
 ```
