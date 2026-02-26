@@ -1,0 +1,121 @@
+---
+title: MCP Gateway API
+description: Managed MCP gateway control-plane and data-plane endpoints.
+---
+
+Managed MCP gateway endpoints are served from `veto-server` under `/v1/mcp`.
+
+## Authentication
+
+Data plane endpoints (`/:slug`) require API key auth:
+
+- `X-Veto-API-Key: veto_xxx`
+- or bearer API key in `Authorization: Bearer veto_xxx`
+
+Control plane endpoints (`/upstreams*`) use combined auth middleware (dashboard JWT sessions and API keys).
+
+## Data plane
+
+### `POST /v1/mcp/:upstreamSlug`
+
+Proxy an MCP JSON-RPC request through Veto policy enforcement.
+
+```bash
+curl -X POST https://api.runveto.com/v1/mcp/default \
+  -H 'X-Veto-API-Key: veto_xxx' \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"approve_invoice","arguments":{"amount":120}}}'
+```
+
+Decision mapping:
+
+- `allow`: forwarded upstream response.
+- `deny`: JSON-RPC error `-32001`.
+- `require_approval`: JSON-RPC error `-32002`.
+
+### `GET /v1/mcp/:upstreamSlug`
+
+Open an SSE event stream for session notifications and decision events.
+
+Typical events:
+
+- JSON-RPC session notification (`notifications/session`).
+- Veto decision envelope (`type: "decision"`).
+
+## Control plane
+
+### `GET /v1/mcp/upstreams`
+
+List MCP upstreams in org/project scope.
+
+Query params:
+
+- `projectId` (optional)
+
+### `POST /v1/mcp/upstreams`
+
+Create an upstream.
+
+```json
+{
+  "name": "default",
+  "slug": "default",
+  "transport": "mcp-sse",
+  "url": "https://example.com/mcp",
+  "timeoutMs": 30000,
+  "enabled": true,
+  "headers": {
+    "authorization": "Bearer token"
+  }
+}
+```
+
+Managed v1 behavior:
+
+- accepts `mcp-sse`
+- rejects `mcp-stdio` with validation error
+
+### `PATCH /v1/mcp/upstreams/:id`
+
+Update upstream fields (`name`, `slug`, `transport`, `url`, `command`, `args`, `headers`, `timeoutMs`, `enabled`, `projectId`).
+
+### `DELETE /v1/mcp/upstreams/:id`
+
+Delete an upstream config.
+
+### `POST /v1/mcp/upstreams/:id/test`
+
+Run a connectivity test for an upstream.
+
+Response shape:
+
+```json
+{
+  "ok": true,
+  "status": 200,
+  "latencyMs": 42,
+  "message": "Upstream reachable"
+}
+```
+
+## Error semantics
+
+Common error codes:
+
+- `invalid_api_key` (401)
+- `validation_failed` (400)
+- `not_found` (404)
+- `rate_limit_exceeded` (429)
+- `plan_limit_exceeded` (429)
+
+JSON-RPC errors from data plane:
+
+- `-32600`: invalid JSON-RPC request
+- `-32001`: policy deny
+- `-32002`: require approval
+- `-32603`: upstream/internal gateway failure
+
+## Related
+
+- [MCP Gateway guide](/docs/guides/mcp-gateway)
+- [CLI reference](/docs/sdk/cli)
