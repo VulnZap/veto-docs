@@ -101,6 +101,7 @@ guarded_tools = veto.wrap(tools)
 - Human auth for CLI: `veto cloud login`
 - Managed MCP gateway: `/v1/mcp/:upstreamSlug` (SSE upstream in managed mode)
 - Self-hosted MCP gateway: `veto mcp serve` (supports `mcp-sse` and `mcp-stdio`)
+- Polymarket showcase: https://docs.runveto.com/docs/guides/polymarket-veto-mcp
 
 ## skills.sh Skill
 
