@@ -58,6 +58,7 @@ Renderer notes:
 - `ink` is the default interactive renderer on Node.js.
 - `opentui` is optional and intended for Bun runtimes.
 - `ansi` is fallback-safe for CI and limited terminals.
+- if `ink` import/init fails at runtime, Studio falls back to `ansi` and prints a warning.
 
 Legacy REPL (`--legacy`) keeps slash commands:
 - `/scan` for coverage suggestions
@@ -157,6 +158,26 @@ Diagnostics for runtime, renderer, auth, and connectivity:
 
 ```bash
 veto doctor
+veto doctor --json
+```
+
+### Runtime troubleshooting
+
+If `npx veto-cli@latest` fails with module-resolution errors from `~/.npm/_npx`, it is usually a corrupted transient `npx` install cache, not a policy/runtime bug.
+
+Use either approach:
+
+```bash
+# One-off isolated cache
+npm_config_cache=/tmp/veto-npx-cache npx -y veto-cli@latest
+
+# Then retry normal invocation
+npx -y veto-cli@latest
+```
+
+For renderer diagnostics:
+
+```bash
 veto doctor --json
 ```
 
