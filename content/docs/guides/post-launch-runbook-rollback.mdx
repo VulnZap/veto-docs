@@ -1,0 +1,169 @@
+---
+title: Post-Launch Runbook & Rollback
+description: Deployment order, smoke checks, incident response, and rollback steps for Veto launch operations.
+---
+
+Use this runbook after launch merges to verify production health and to execute safe rollback when needed.
+
+## Scope
+
+- `veto-server` Cloud Run service: `veto-backend`
+- `veto-frontend` Cloud Run service: `veto-frontend`
+- `veto-docs` Cloud Run service: `veto-docs`
+
+## Deployment Order
+
+Deploy in this order to avoid contract drift:
+
+1. `veto-server`
+2. `veto-frontend`
+3. `veto-docs`
+
+### Reference deploy configs
+
+- Server: [`veto-server/cloudbuild.yaml`](https://github.com/VulnZap/veto-server/blob/main/cloudbuild.yaml)
+- Frontend: [`veto-frontend/cloudbuild.yaml`](https://github.com/VulnZap/veto-frontend/blob/main/cloudbuild.yaml)
+- Docs: [`veto-docs/cloudbuild.yaml`](https://github.com/VulnZap/veto-docs/blob/main/cloudbuild.yaml)
+
+## Pre-Deploy Checklist
+
+1. Confirm CI checks passed for all merged PRs.
+2. Confirm no pending database migration step is skipped.
+3. Confirm Cloud Build triggers target `main`.
+4. Confirm current Cloud Run revision and traffic split for each service.
+
+## Smoke Tests
+
+### Server smoke test
+
+Run against production API:
+
+```bash
+cd veto-server
+VETO_BASE_URL=https://api.runveto.com ./scripts/smoke-test.sh
+```
+
+Reference script:
+- [`veto-server/scripts/smoke-test.sh`](https://github.com/VulnZap/veto-server/blob/main/scripts/smoke-test.sh)
+
+### Readiness verification (webhooks + canary/rollback path)
+
+```bash
+cd veto-server
+VETO_CLOUD_RUN_SERVICE=veto-backend \
+VETO_CLOUD_RUN_REGION=us-central1 \
+./scripts/verify-prod-readiness.sh
+```
+
+Reference script:
+- [`veto-server/scripts/verify-prod-readiness.sh`](https://github.com/VulnZap/veto-server/blob/main/scripts/verify-prod-readiness.sh)
+
+Expected outcomes:
+- `/health` remains `200`
+- webhook checks pass
+- canary/prod switch and rollback checks pass
+- final traffic split restored
+
+### Frontend/docs sanity checks
+
+1. Open `https://runveto.com` and verify landing + dashboard login flow.
+2. Open `https://docs.runveto.com/docs` and verify docs render and search.
+3. Validate new launch pages:
+   - `/about`
+   - `/comparison`
+   - `/launch`
+
+## Incident Triage Flow
+
+When a launch issue is detected:
+
+1. Classify severity:
+   - `SEV-1`: data loss, auth break, full outage
+   - `SEV-2`: major feature unavailable
+   - `SEV-3`: degraded but usable
+2. Contain:
+   - pause further deploys
+   - freeze config/manual changes
+3. Diagnose:
+   - Cloud Run revision health
+   - recent deploy diff
+   - logs and error-rate spikes
+4. Decide:
+   - hotfix forward if risk is low and fix is clear
+   - rollback if customer impact is active or unknown
+
+## Rollback Procedure (Cloud Run)
+
+### 1) Capture current state
+
+```bash
+gcloud run services describe veto-backend --region us-central1 --format=json
+```
+
+Record:
+- current live revision
+- previous ready revision
+- traffic split
+
+### 2) Roll back to previous stable revision
+
+```bash
+gcloud run services update-traffic veto-backend \
+  --region us-central1 \
+  --to-revisions <PREVIOUS_READY_REVISION>=100
+```
+
+### 3) Verify post-rollback health
+
+```bash
+curl -i https://api.runveto.com/health
+```
+
+Run targeted smoke checks again:
+
+```bash
+cd veto-server
+VETO_BASE_URL=https://api.runveto.com ./scripts/smoke-test.sh
+```
+
+### 4) Restore intended split when safe
+
+If a temporary split was used, restore it explicitly with:
+
+```bash
+gcloud run services update-traffic veto-backend \
+  --region us-central1 \
+  --to-revisions <REVISION_A>=<PERCENT>,<REVISION_B>=<PERCENT>
+```
+
+## Evidence Capture Template
+
+Copy this into your launch notes for each run:
+
+```text
+Date/Time (UTC):
+Operator:
+Commit SHA(s):
+
+Deploy order completed:
+- server: pass/fail
+- frontend: pass/fail
+- docs: pass/fail
+
+Smoke test summary:
+- server smoke-test.sh: pass/fail
+- verify-prod-readiness.sh: pass/fail
+- frontend route checks: pass/fail
+- docs route checks: pass/fail
+
+Rollback executed: yes/no
+Rollback command:
+Post-rollback /health:
+
+Open follow-ups:
+```
+
+## Escalation Defaults
+
+- If `SEV-1` or unresolved `SEV-2` after 15 minutes, roll back first, then continue diagnosis.
+- Never run ad-hoc production changes without recording command + timestamp + operator.
