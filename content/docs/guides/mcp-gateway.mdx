@@ -1,0 +1,133 @@
+---
+title: MCP Gateway
+description: Run Veto as a managed or self-hosted MCP policy gateway.
+---
+
+Veto MCP Gateway lets you enforce Veto policies on MCP `tools/call` traffic while preserving normal MCP JSON-RPC behavior.
+
+## Architecture
+
+Veto MCP Gateway has two launch paths:
+
+1. Managed gateway in `veto-server`:
+   - Configure upstreams in the dashboard.
+   - Call `POST /v1/mcp/:slug` (and optional `GET /v1/mcp/:slug` SSE stream).
+   - Data path auth uses your Veto API key.
+2. Self-hosted gateway in CLI:
+   - Run `veto mcp serve`.
+   - Route MCP requests to configured upstreams from `veto/mcp.config.yaml`.
+   - Supports `mcp-sse` and `mcp-stdio`.
+
+Policy decisions map to JSON-RPC responses:
+
+- `allow`: upstream call is forwarded.
+- `deny`: JSON-RPC error `-32001`.
+- `require_approval`: JSON-RPC error `-32002`.
+
+## Self-hosted quickstart
+
+Initialize config:
+
+```bash
+veto mcp init
+```
+
+Generated file:
+
+```yaml
+listen:
+  host: 127.0.0.1
+  port: 8799
+policy:
+  serverUrl: http://localhost:3001
+  apiKey: veto_replace_me
+upstreams:
+  - name: default
+    transport: mcp-sse
+    url: http://localhost:3000/mcp
+    timeoutMs: 30000
+```
+
+Run diagnostics:
+
+```bash
+veto mcp doctor
+veto mcp doctor --json
+```
+
+Start gateway:
+
+```bash
+veto mcp serve --config ./veto/mcp.config.yaml
+```
+
+You can also run without a config file for simple SSE setups:
+
+```bash
+veto mcp serve \
+  --upstream http://localhost:3000/mcp \
+  --api-key veto_xxx \
+  --policy-server http://localhost:3001
+```
+
+## Managed quickstart
+
+1. Open dashboard settings and go to **MCP Gateway**.
+2. Add an upstream slug and transport (`mcp-sse` in managed mode).
+3. Test connectivity from the UI.
+4. Send MCP JSON-RPC to:
+
+```bash
+curl -X POST https://api.runveto.com/v1/mcp/default \
+  -H 'X-Veto-API-Key: veto_xxx' \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+## Managed vs self-hosted transport support
+
+- Managed v1 supports: `mcp-sse`.
+- Self-hosted supports: `mcp-sse`, `mcp-stdio`.
+
+If you need stdio for local process adapters, run self-hosted `veto mcp serve`.
+
+## Troubleshooting
+
+### SSE upstream timeouts
+
+Symptoms:
+- `Upstream timeout`
+- `No response in SSE stream`
+
+Checks:
+- Increase `timeoutMs` for the upstream.
+- Verify upstream endpoint accepts JSON-RPC `POST` payloads.
+- Confirm upstream returns matching JSON-RPC `id` in responses.
+
+### Policy server unreachable
+
+Symptoms:
+- `Policy server unreachable`
+- doctor reports policy server probe failure.
+
+Checks:
+- Verify `policy.serverUrl`.
+- Verify `policy.apiKey` starts with `veto_` and is valid.
+- Confirm `POST /v1/validate` is reachable from gateway runtime.
+
+### Stdio differences
+
+Symptoms:
+- Managed upstream creation rejected for `mcp-stdio`.
+
+Cause:
+- Managed v1 intentionally blocks stdio transports.
+
+Resolution:
+- Move that upstream to self-hosted `veto mcp serve`.
+
+## Related
+
+- [CLI reference](/docs/sdk/cli)
+- [MCP API reference](/docs/api-reference/mcp)
+- [MCP SDK integration](/docs/integrations/mcp)
